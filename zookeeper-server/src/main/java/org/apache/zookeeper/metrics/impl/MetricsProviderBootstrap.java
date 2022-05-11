@@ -32,9 +32,7 @@ public abstract class MetricsProviderBootstrap {
 
     private static final Logger LOG = LoggerFactory.getLogger(MetricsProviderBootstrap.class);
 
-    public static MetricsProvider startMetricsProvider(
-        String metricsProviderClassName,
-        Properties configuration) throws MetricsProviderLifeCycleException {
+    public static MetricsProvider startMetricsProvider(String metricsProviderClassName, Properties configuration) throws MetricsProviderLifeCycleException {
         try {
             Class<?> clazz = Class.forName(
                 metricsProviderClassName,

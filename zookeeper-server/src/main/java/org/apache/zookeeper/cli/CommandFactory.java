@@ -53,7 +53,7 @@ public class CommandFactory {
         ADD_WATCH(AddWatchCommand::new),
         WHO_AM_I(WhoAmICommand::new);
 
-        private Supplier<? extends CliCommand> instantiator;
+        private final Supplier<? extends CliCommand> instantiator;
 
         private CliCommand getInstance() {
             return instantiator.get();

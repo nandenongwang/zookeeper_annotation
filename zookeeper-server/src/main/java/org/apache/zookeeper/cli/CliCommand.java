@@ -30,8 +30,8 @@ public abstract class CliCommand {
     protected ZooKeeper zk;
     protected PrintStream out;
     protected PrintStream err;
-    private String cmdStr;
-    private String optionStr;
+    private final String cmdStr;
+    private final String optionStr;
 
     /**
      * a CLI command with command string and options.

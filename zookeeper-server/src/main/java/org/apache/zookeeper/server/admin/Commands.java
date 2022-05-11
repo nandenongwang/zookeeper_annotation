@@ -67,8 +67,8 @@ public class Commands {
     static final Logger LOG = LoggerFactory.getLogger(Commands.class);
 
     /** Maps command names to Command instances */
-    private static Map<String, Command> commands = new HashMap<String, Command>();
-    private static Set<String> primaryNames = new HashSet<String>();
+    private static final Map<String, Command> commands = new HashMap<>();
+    private static final Set<String> primaryNames = new HashSet<>();
 
     /**
      * Registers the given command. Registered commands can be run by passing

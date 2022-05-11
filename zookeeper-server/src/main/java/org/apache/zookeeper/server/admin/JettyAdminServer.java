@@ -235,12 +235,11 @@ public class JettyAdminServer implements AdminServer {
 
         private static final long serialVersionUID = 1L;
 
-        protected void doGet(
-            HttpServletRequest request,
-            HttpServletResponse response) throws ServletException, IOException {
+        @Override
+        protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
             // Capture the command name from the URL
             String cmd = request.getPathInfo();
-            if (cmd == null || cmd.equals("/")) {
+            if (cmd == null || "/".equals(cmd)) {
                 // No command specified, print links to all commands instead
                 for (String link : commandLinks()) {
                     response.getWriter().println(link);
@@ -253,7 +252,7 @@ public class JettyAdminServer implements AdminServer {
 
             // Extract keyword arguments to command from request parameters
             @SuppressWarnings("unchecked") Map<String, String[]> parameterMap = request.getParameterMap();
-            Map<String, String> kwargs = new HashMap<String, String>();
+            Map<String, String> kwargs = new HashMap<>();
             for (Map.Entry<String, String[]> entry : parameterMap.entrySet()) {
                 kwargs.put(entry.getKey(), entry.getValue()[0]);
             }

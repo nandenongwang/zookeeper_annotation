@@ -37,7 +37,7 @@ import org.apache.zookeeper.server.EphemeralType;
  */
 public class CreateCommand extends CliCommand {
 
-    private static Options options = new Options();
+    private static final Options options = new Options();
     private String[] args;
     private CommandLine cl;
 

@@ -18,15 +18,6 @@
 
 package org.apache.zookeeper.server.quorum;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
-import java.io.IOException;
-import java.nio.BufferUnderflowException;
-import java.nio.ByteBuffer;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 import org.apache.zookeeper.common.Time;
 import org.apache.zookeeper.jmx.MBeanRegistry;
 import org.apache.zookeeper.server.ZooKeeperThread;
@@ -40,11 +31,22 @@ import org.apache.zookeeper.server.util.ZxidUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.nio.BufferUnderflowException;
+import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 /**
  * Implementation of leader election using TCP. It uses an object of the class
  * QuorumCnxManager to manage connections. Otherwise, the algorithm is push-based
  * as with the other UDP implementations.
- *
+ * <p>
  * There are a few parameters that can be tuned to change its behavior. First,
  * finalizeWait determines the amount of time to wait until deciding upon a leader.
  * This is part of the leader election algorithm.
@@ -119,28 +121,35 @@ public class FastLeaderElection implements Election {
 
         /*
          * Proposed leader
-         */ long leader;
+         */
+        long leader;
 
         /*
          * zxid of the proposed leader
-         */ long zxid;
+         */
+        long zxid;
 
         /*
          * Epoch
-         */ long electionEpoch;
+         */
+        long electionEpoch;
 
         /*
          * current state of sender
-         */ QuorumPeer.ServerState state;
+         */
+        QuorumPeer.ServerState state;
 
         /*
          * Address of sender
-         */ long sid;
+         */
+        long sid;
 
         QuorumVerifier qv;
+
         /*
          * epoch of the proposed leader
-         */ long peerEpoch;
+         */
+        long peerEpoch;
 
     }
 
@@ -229,6 +238,7 @@ public class FastLeaderElection implements Election {
                 this.manager = manager;
             }
 
+            @Override
             public void run() {
 
                 Message response;
@@ -295,7 +305,7 @@ public class FastLeaderElection implements Election {
                                 // (causing NegativeArraySizeException) or huge length (causing e.g. OutOfMemoryError)
                                 if (configLength < 0 || configLength > capacity) {
                                     throw new IOException(String.format("Invalid configLength in notification message! sid=%d, capacity=%d, version=%d, configLength=%d",
-                                                                        response.sid, capacity, version, configLength));
+                                            response.sid, capacity, version, configLength));
                                 }
 
                                 byte[] b = new byte[configLength];
@@ -307,9 +317,9 @@ public class FastLeaderElection implements Election {
                                         QuorumVerifier curQV = self.getQuorumVerifier();
                                         if (rqv.getVersion() > curQV.getVersion()) {
                                             LOG.info("{} Received version: {} my version: {}",
-                                                     self.getId(),
-                                                     Long.toHexString(rqv.getVersion()),
-                                                     Long.toHexString(self.getQuorumVerifier().getVersion()));
+                                                    self.getId(),
+                                                    Long.toHexString(rqv.getVersion()),
+                                                    Long.toHexString(self.getQuorumVerifier().getVersion()));
                                             if (self.getPeerState() == ServerState.LOOKING) {
                                                 LOG.debug("Invoking processReconfig(), state: {}", self.getServerState());
                                                 self.processReconfig(rqv, null, null, false);
@@ -333,7 +343,7 @@ public class FastLeaderElection implements Election {
                             }
                         } catch (BufferUnderflowException | IOException e) {
                             LOG.warn("Skipping the processing of a partial / malformed response message sent by sid={} (message length: {})",
-                                     response.sid, capacity, e);
+                                    response.sid, capacity, e);
                             continue;
                         }
                         /*
@@ -344,14 +354,14 @@ public class FastLeaderElection implements Election {
                             Vote current = self.getCurrentVote();
                             QuorumVerifier qv = self.getQuorumVerifier();
                             ToSend notmsg = new ToSend(
-                                ToSend.mType.notification,
-                                current.getId(),
-                                current.getZxid(),
-                                logicalclock.get(),
-                                self.getPeerState(),
-                                response.sid,
-                                current.getPeerEpoch(),
-                                qv.toString().getBytes(UTF_8));
+                                    ToSend.mType.notification,
+                                    current.getId(),
+                                    current.getZxid(),
+                                    logicalclock.get(),
+                                    self.getPeerState(),
+                                    response.sid,
+                                    current.getPeerEpoch(),
+                                    qv.toString().getBytes(UTF_8));
 
                             sendqueue.offer(notmsg);
                         } else {
@@ -361,20 +371,20 @@ public class FastLeaderElection implements Election {
                             // State of peer that sent this message
                             QuorumPeer.ServerState ackstate = QuorumPeer.ServerState.LOOKING;
                             switch (rstate) {
-                            case 0:
-                                ackstate = QuorumPeer.ServerState.LOOKING;
-                                break;
-                            case 1:
-                                ackstate = QuorumPeer.ServerState.FOLLOWING;
-                                break;
-                            case 2:
-                                ackstate = QuorumPeer.ServerState.LEADING;
-                                break;
-                            case 3:
-                                ackstate = QuorumPeer.ServerState.OBSERVING;
-                                break;
-                            default:
-                                continue;
+                                case 0:
+                                    ackstate = QuorumPeer.ServerState.LOOKING;
+                                    break;
+                                case 1:
+                                    ackstate = QuorumPeer.ServerState.FOLLOWING;
+                                    break;
+                                case 2:
+                                    ackstate = QuorumPeer.ServerState.LEADING;
+                                    break;
+                                case 3:
+                                    ackstate = QuorumPeer.ServerState.OBSERVING;
+                                    break;
+                                default:
+                                    continue;
                             }
 
                             n.leader = rleader;
@@ -389,17 +399,17 @@ public class FastLeaderElection implements Election {
                              * Print notification info
                              */
                             LOG.info(
-                                "Notification: my state:{}; n.sid:{}, n.state:{}, n.leader:{}, n.round:0x{}, "
-                                    + "n.peerEpoch:0x{}, n.zxid:0x{}, message format version:0x{}, n.config version:0x{}",
-                                self.getPeerState(),
-                                n.sid,
-                                n.state,
-                                n.leader,
-                                Long.toHexString(n.electionEpoch),
-                                Long.toHexString(n.peerEpoch),
-                                Long.toHexString(n.zxid),
-                                Long.toHexString(n.version),
-                                (n.qv != null ? (Long.toHexString(n.qv.getVersion())) : "0"));
+                                    "Notification: my state:{}; n.sid:{}, n.state:{}, n.leader:{}, n.round:0x{}, "
+                                            + "n.peerEpoch:0x{}, n.zxid:0x{}, message format version:0x{}, n.config version:0x{}",
+                                    self.getPeerState(),
+                                    n.sid,
+                                    n.state,
+                                    n.leader,
+                                    Long.toHexString(n.electionEpoch),
+                                    Long.toHexString(n.peerEpoch),
+                                    Long.toHexString(n.zxid),
+                                    Long.toHexString(n.version),
+                                    (n.qv != null ? (Long.toHexString(n.qv.getVersion())) : "0"));
 
                             /*
                              * If this server is looking, then send proposed leader
@@ -414,18 +424,18 @@ public class FastLeaderElection implements Election {
                                  * lagging behind.
                                  */
                                 if ((ackstate == QuorumPeer.ServerState.LOOKING)
-                                    && (n.electionEpoch < logicalclock.get())) {
+                                        && (n.electionEpoch < logicalclock.get())) {
                                     Vote v = getVote();
                                     QuorumVerifier qv = self.getQuorumVerifier();
                                     ToSend notmsg = new ToSend(
-                                        ToSend.mType.notification,
-                                        v.getId(),
-                                        v.getZxid(),
-                                        logicalclock.get(),
-                                        self.getPeerState(),
-                                        response.sid,
-                                        v.getPeerEpoch(),
-                                        qv.toString().getBytes());
+                                            ToSend.mType.notification,
+                                            v.getId(),
+                                            v.getZxid(),
+                                            logicalclock.get(),
+                                            self.getPeerState(),
+                                            response.sid,
+                                            v.getPeerEpoch(),
+                                            qv.toString().getBytes());
                                     sendqueue.offer(notmsg);
                                 }
                             } else {
@@ -445,23 +455,23 @@ public class FastLeaderElection implements Election {
 
 
                                     LOG.debug(
-                                        "Sending new notification. My id ={} recipient={} zxid=0x{} leader={} config version = {}",
-                                        self.getId(),
-                                        response.sid,
-                                        Long.toHexString(current.getZxid()),
-                                        current.getId(),
-                                        Long.toHexString(self.getQuorumVerifier().getVersion()));
+                                            "Sending new notification. My id ={} recipient={} zxid=0x{} leader={} config version = {}",
+                                            self.getId(),
+                                            response.sid,
+                                            Long.toHexString(current.getZxid()),
+                                            current.getId(),
+                                            Long.toHexString(self.getQuorumVerifier().getVersion()));
 
                                     QuorumVerifier qv = self.getQuorumVerifier();
                                     ToSend notmsg = new ToSend(
-                                        ToSend.mType.notification,
-                                        current.getId(),
-                                        current.getZxid(),
-                                        current.getElectionEpoch(),
-                                        self.getPeerState(),
-                                        response.sid,
-                                        current.getPeerEpoch(),
-                                        qv.toString().getBytes());
+                                            ToSend.mType.notification,
+                                            current.getId(),
+                                            current.getZxid(),
+                                            current.getElectionEpoch(),
+                                            self.getPeerState(),
+                                            response.sid,
+                                            current.getPeerEpoch(),
+                                            qv.toString().getBytes());
                                     sendqueue.offer(notmsg);
                                 }
                             }
@@ -491,6 +501,7 @@ public class FastLeaderElection implements Election {
                 this.manager = manager;
             }
 
+            @Override
             public void run() {
                 while (!stop) {
                     try {
@@ -510,7 +521,7 @@ public class FastLeaderElection implements Election {
             /**
              * Called by run() once there is a new message to send.
              *
-             * @param m     message to send
+             * @param m message to send
              */
             void process(ToSend m) {
                 ByteBuffer requestBuffer = buildMsg(m.state.ordinal(), m.leader, m.zxid, m.electionEpoch, m.peerEpoch, m.configData);
@@ -529,7 +540,7 @@ public class FastLeaderElection implements Election {
         /**
          * Constructor of class Messenger.
          *
-         * @param manager   Connection manager
+         * @param manager Connection manager
          */
         Messenger(QuorumCnxManager manager) {
 
@@ -622,8 +633,8 @@ public class FastLeaderElection implements Election {
      * is the connection manager. Such an object should be created only once
      * by each peer during an instance of the ZooKeeper service.
      *
-     * @param self  QuorumPeer that created this object
-     * @param manager   Connection manager
+     * @param self    QuorumPeer that created this object
+     * @param manager Connection manager
      */
     public FastLeaderElection(QuorumPeer self, QuorumCnxManager manager) {
         this.stop = false;
@@ -638,8 +649,8 @@ public class FastLeaderElection implements Election {
      * a separate method. As we have a single constructor currently,
      * it is not strictly necessary to have it separate.
      *
-     * @param self      QuorumPeer that created this object
-     * @param manager   Connection manager
+     * @param self    QuorumPeer that created this object
+     * @param manager Connection manager
      */
     private void starter(QuorumPeer self, QuorumCnxManager manager) {
         this.self = self;
@@ -660,11 +671,11 @@ public class FastLeaderElection implements Election {
 
     private void leaveInstance(Vote v) {
         LOG.debug(
-            "About to leave FLE instance: leader={}, zxid=0x{}, my id={}, my state={}",
-            v.getId(),
-            Long.toHexString(v.getZxid()),
-            self.getId(),
-            self.getPeerState());
+                "About to leave FLE instance: leader={}, zxid=0x{}, my id={}, my state={}",
+                v.getId(),
+                Long.toHexString(v.getZxid()),
+                self.getId(),
+                self.getPeerState());
         recvqueue.clear();
     }
 
@@ -673,6 +684,8 @@ public class FastLeaderElection implements Election {
     }
 
     volatile boolean stop;
+
+    @Override
     public void shutdown() {
         stop = true;
         proposedLeader = -1;
@@ -692,24 +705,24 @@ public class FastLeaderElection implements Election {
         for (long sid : self.getCurrentAndNextConfigVoters()) {
             QuorumVerifier qv = self.getQuorumVerifier();
             ToSend notmsg = new ToSend(
-                ToSend.mType.notification,
-                proposedLeader,
-                proposedZxid,
-                logicalclock.get(),
-                QuorumPeer.ServerState.LOOKING,
-                sid,
-                proposedEpoch,
-                qv.toString().getBytes(UTF_8));
+                    ToSend.mType.notification,
+                    proposedLeader,
+                    proposedZxid,
+                    logicalclock.get(),
+                    QuorumPeer.ServerState.LOOKING,
+                    sid,
+                    proposedEpoch,
+                    qv.toString().getBytes(UTF_8));
 
             LOG.debug(
-                "Sending Notification: {} (n.leader), 0x{} (n.zxid), 0x{} (n.round), {} (recipient),"
-                    + " {} (myid), 0x{} (n.peerEpoch) ",
-                proposedLeader,
-                Long.toHexString(proposedZxid),
-                Long.toHexString(logicalclock.get()),
-                sid,
-                self.getId(),
-                Long.toHexString(proposedEpoch));
+                    "Sending Notification: {} (n.leader), 0x{} (n.zxid), 0x{} (n.round), {} (recipient),"
+                            + " {} (myid), 0x{} (n.peerEpoch) ",
+                    proposedLeader,
+                    Long.toHexString(proposedZxid),
+                    Long.toHexString(logicalclock.get()),
+                    sid,
+                    self.getId(),
+                    Long.toHexString(proposedEpoch));
 
             sendqueue.offer(notmsg);
         }
@@ -718,15 +731,14 @@ public class FastLeaderElection implements Election {
     /**
      * Check if a pair (server id, zxid) succeeds our
      * current vote.
-     *
      */
     protected boolean totalOrderPredicate(long newId, long newZxid, long newEpoch, long curId, long curZxid, long curEpoch) {
         LOG.debug(
-            "id: {}, proposed id: {}, zxid: 0x{}, proposed zxid: 0x{}",
-            newId,
-            curId,
-            Long.toHexString(newZxid),
-            Long.toHexString(curZxid));
+                "id: {}, proposed id: {}, zxid: 0x{}, proposed zxid: 0x{}",
+                newId,
+                curId,
+                Long.toHexString(newZxid),
+                Long.toHexString(curZxid));
 
         if (self.getQuorumVerifier().getWeight(newId) == 0) {
             return false;
@@ -742,26 +754,24 @@ public class FastLeaderElection implements Election {
 
         return ((newEpoch > curEpoch)
                 || ((newEpoch == curEpoch)
-                    && ((newZxid > curZxid)
-                        || ((newZxid == curZxid)
-                            && (newId > curId)))));
+                && ((newZxid > curZxid)
+                || ((newZxid == curZxid)
+                && (newId > curId)))));
     }
 
     /**
      * Given a set of votes, return the SyncedLearnerTracker which is used to
      * determines if have sufficient to declare the end of the election round.
      *
-     * @param votes
-     *            Set of votes
-     * @param vote
-     *            Identifier of the vote received last
+     * @param votes Set of votes
+     * @param vote  Identifier of the vote received last
      * @return the SyncedLearnerTracker with vote details
      */
     protected SyncedLearnerTracker getVoteTracker(Map<Long, Vote> votes, Vote vote) {
         SyncedLearnerTracker voteSet = new SyncedLearnerTracker();
         voteSet.addQuorumVerifier(self.getQuorumVerifier());
         if (self.getLastSeenQuorumVerifier() != null
-            && self.getLastSeenQuorumVerifier().getVersion() > self.getQuorumVerifier().getVersion()) {
+                && self.getLastSeenQuorumVerifier().getVersion() > self.getQuorumVerifier().getVersion()) {
             voteSet.addQuorumVerifier(self.getLastSeenQuorumVerifier());
         }
 
@@ -785,9 +795,9 @@ public class FastLeaderElection implements Election {
      * electing over and over a peer that has crashed and it is no
      * longer leading.
      *
-     * @param votes set of votes
-     * @param   leader  leader id
-     * @param   electionEpoch   epoch id
+     * @param votes         set of votes
+     * @param leader        leader id
+     * @param electionEpoch epoch id
      */
     protected boolean checkLeader(Map<Long, Vote> votes, long leader, long electionEpoch) {
 
@@ -815,11 +825,11 @@ public class FastLeaderElection implements Election {
 
     synchronized void updateProposal(long leader, long zxid, long epoch) {
         LOG.debug(
-            "Updating proposal: {} (newleader), 0x{} (newzxid), {} (oldleader), 0x{} (oldzxid)",
-            leader,
-            Long.toHexString(zxid),
-            proposedLeader,
-            Long.toHexString(proposedZxid));
+                "Updating proposal: {} (newleader), 0x{} (newzxid), {} (oldleader), 0x{} (oldzxid)",
+                leader,
+                Long.toHexString(zxid),
+                proposedLeader,
+                Long.toHexString(proposedZxid));
 
         proposedLeader = leader;
         proposedZxid = zxid;
@@ -909,6 +919,7 @@ public class FastLeaderElection implements Election {
      * changes its state to LOOKING, this method is invoked, and it
      * sends notifications to all other peers.
      */
+    @Override
     public Vote lookForLeader() throws InterruptedException {
         try {
             self.jmxLeaderElectionBean = new LeaderElectionBean();
@@ -925,7 +936,7 @@ public class FastLeaderElection implements Election {
              * if v.electionEpoch == logicalclock. The current participant uses recvset to deduce on whether a majority
              * of participants has voted for it.
              */
-            Map<Long, Vote> recvset = new HashMap<Long, Vote>();
+            Map<Long, Vote> recvset = new HashMap<>();
 
             /*
              * The votes from previous leader elections, as well as the votes from the current leader election are
@@ -934,7 +945,7 @@ public class FastLeaderElection implements Election {
              * outofelection to learn which participant is the leader if it arrives late (i.e., higher logicalclock than
              * the electionEpoch of the received notifications) in a leader election.
              */
-            Map<Long, Vote> outofelection = new HashMap<Long, Vote>();
+            Map<Long, Vote> outofelection = new HashMap<>();
 
             int notTimeout = minNotificationInterval;
 
@@ -944,9 +955,9 @@ public class FastLeaderElection implements Election {
             }
 
             LOG.info(
-                "New election. My id = {}, proposed zxid=0x{}",
-                self.getId(),
-                Long.toHexString(proposedZxid));
+                    "New election. My id = {}, proposed zxid=0x{}",
+                    self.getId(),
+                    Long.toHexString(proposedZxid));
             sendNotifications();
 
             SyncedLearnerTracker voteSet = null;
@@ -1001,123 +1012,123 @@ public class FastLeaderElection implements Election {
                      * voting view for a replica in the current or next voting view.
                      */
                     switch (n.state) {
-                    case LOOKING:
-                        if (getInitLastLoggedZxid() == -1) {
-                            LOG.debug("Ignoring notification as our zxid is -1");
-                            break;
-                        }
-                        if (n.zxid == -1) {
-                            LOG.debug("Ignoring notification from member with -1 zxid {}", n.sid);
-                            break;
-                        }
-                        // If notification > current, replace and send messages out
-                        if (n.electionEpoch > logicalclock.get()) {
-                            logicalclock.set(n.electionEpoch);
-                            recvset.clear();
-                            if (totalOrderPredicate(n.leader, n.zxid, n.peerEpoch, getInitId(), getInitLastLoggedZxid(), getPeerEpoch())) {
-                                updateProposal(n.leader, n.zxid, n.peerEpoch);
-                            } else {
-                                updateProposal(getInitId(), getInitLastLoggedZxid(), getPeerEpoch());
+                        case LOOKING:
+                            if (getInitLastLoggedZxid() == -1) {
+                                LOG.debug("Ignoring notification as our zxid is -1");
+                                break;
                             }
-                            sendNotifications();
-                        } else if (n.electionEpoch < logicalclock.get()) {
+                            if (n.zxid == -1) {
+                                LOG.debug("Ignoring notification from member with -1 zxid {}", n.sid);
+                                break;
+                            }
+                            // If notification > current, replace and send messages out
+                            if (n.electionEpoch > logicalclock.get()) {
+                                logicalclock.set(n.electionEpoch);
+                                recvset.clear();
+                                if (totalOrderPredicate(n.leader, n.zxid, n.peerEpoch, getInitId(), getInitLastLoggedZxid(), getPeerEpoch())) {
+                                    updateProposal(n.leader, n.zxid, n.peerEpoch);
+                                } else {
+                                    updateProposal(getInitId(), getInitLastLoggedZxid(), getPeerEpoch());
+                                }
+                                sendNotifications();
+                            } else if (n.electionEpoch < logicalclock.get()) {
                                 LOG.debug(
-                                    "Notification election epoch is smaller than logicalclock. n.electionEpoch = 0x{}, logicalclock=0x{}",
-                                    Long.toHexString(n.electionEpoch),
-                                    Long.toHexString(logicalclock.get()));
-                            break;
-                        } else if (totalOrderPredicate(n.leader, n.zxid, n.peerEpoch, proposedLeader, proposedZxid, proposedEpoch)) {
-                            updateProposal(n.leader, n.zxid, n.peerEpoch);
-                            sendNotifications();
-                        }
+                                        "Notification election epoch is smaller than logicalclock. n.electionEpoch = 0x{}, logicalclock=0x{}",
+                                        Long.toHexString(n.electionEpoch),
+                                        Long.toHexString(logicalclock.get()));
+                                break;
+                            } else if (totalOrderPredicate(n.leader, n.zxid, n.peerEpoch, proposedLeader, proposedZxid, proposedEpoch)) {
+                                updateProposal(n.leader, n.zxid, n.peerEpoch);
+                                sendNotifications();
+                            }
 
-                        LOG.debug(
-                            "Adding vote: from={}, proposed leader={}, proposed zxid=0x{}, proposed election epoch=0x{}",
-                            n.sid,
-                            n.leader,
-                            Long.toHexString(n.zxid),
-                            Long.toHexString(n.electionEpoch));
+                            LOG.debug(
+                                    "Adding vote: from={}, proposed leader={}, proposed zxid=0x{}, proposed election epoch=0x{}",
+                                    n.sid,
+                                    n.leader,
+                                    Long.toHexString(n.zxid),
+                                    Long.toHexString(n.electionEpoch));
 
-                        // don't care about the version if it's in LOOKING state
-                        recvset.put(n.sid, new Vote(n.leader, n.zxid, n.electionEpoch, n.peerEpoch));
+                            // don't care about the version if it's in LOOKING state
+                            recvset.put(n.sid, new Vote(n.leader, n.zxid, n.electionEpoch, n.peerEpoch));
 
-                        voteSet = getVoteTracker(recvset, new Vote(proposedLeader, proposedZxid, logicalclock.get(), proposedEpoch));
+                            voteSet = getVoteTracker(recvset, new Vote(proposedLeader, proposedZxid, logicalclock.get(), proposedEpoch));
 
-                        if (voteSet.hasAllQuorums()) {
+                            if (voteSet.hasAllQuorums()) {
 
-                            // Verify if there is any change in the proposed leader
-                            while ((n = recvqueue.poll(finalizeWait, TimeUnit.MILLISECONDS)) != null) {
-                                if (totalOrderPredicate(n.leader, n.zxid, n.peerEpoch, proposedLeader, proposedZxid, proposedEpoch)) {
-                                    recvqueue.put(n);
-                                    break;
+                                // Verify if there is any change in the proposed leader
+                                while ((n = recvqueue.poll(finalizeWait, TimeUnit.MILLISECONDS)) != null) {
+                                    if (totalOrderPredicate(n.leader, n.zxid, n.peerEpoch, proposedLeader, proposedZxid, proposedEpoch)) {
+                                        recvqueue.put(n);
+                                        break;
+                                    }
+                                }
+
+                                /*
+                                 * This predicate is true once we don't read any new
+                                 * relevant message from the reception queue
+                                 */
+                                if (n == null) {
+                                    setPeerState(proposedLeader, voteSet);
+                                    Vote endVote = new Vote(proposedLeader, proposedZxid, logicalclock.get(), proposedEpoch);
+                                    leaveInstance(endVote);
+                                    return endVote;
                                 }
                             }
+                            break;
+                        case OBSERVING:
+                            LOG.debug("Notification from observer: {}", n.sid);
+                            break;
 
+                        /*
+                         * In ZOOKEEPER-3922, we separate the behaviors of FOLLOWING and LEADING.
+                         * To avoid the duplication of codes, we create a method called followingBehavior which was used to
+                         * shared by FOLLOWING and LEADING. This method returns a Vote. When the returned Vote is null, it follows
+                         * the original idea to break swtich statement; otherwise, a valid returned Vote indicates, a leader
+                         * is generated.
+                         *
+                         * The reason why we need to separate these behaviors is to make the algorithm runnable for 2-node
+                         * setting. An extra condition for generating leader is needed. Due to the majority rule, only when
+                         * there is a majority in the voteset, a leader will be generated. However, in a configuration of 2 nodes,
+                         * the number to achieve the majority remains 2, which means a recovered node cannot generate a leader which is
+                         * the existed leader. Therefore, we need the Oracle to kick in this situation. In a two-node configuration, the Oracle
+                         * only grants the permission to maintain the progress to one node. The oracle either grants the permission to the
+                         * remained node and makes it a new leader when there is a faulty machine, which is the case to maintain the progress.
+                         * Otherwise, the oracle does not grant the permission to the remained node, which further causes a service down.
+                         *
+                         * In the former case, when a failed server recovers and participate in the leader election, it would not locate a
+                         * new leader because there does not exist a majority in the voteset. It fails on the containAllQuorum() infinitely due to
+                         * two facts. First one is the fact that it does do not have a majority in the voteset. The other fact is the fact that
+                         * the oracle would not give the permission since the oracle already gave the permission to the existed leader, the healthy machine.
+                         * Logically, when the oracle replies with negative, it implies the existed leader which is LEADING notification comes from is a valid leader.
+                         * To threat this negative replies as a permission to generate the leader is the purpose to separate these two behaviors.
+                         *
+                         *
+                         * */
+                        case FOLLOWING:
                             /*
-                             * This predicate is true once we don't read any new
-                             * relevant message from the reception queue
-                             */
-                            if (n == null) {
-                                setPeerState(proposedLeader, voteSet);
-                                Vote endVote = new Vote(proposedLeader, proposedZxid, logicalclock.get(), proposedEpoch);
-                                leaveInstance(endVote);
-                                return endVote;
+                             * To avoid duplicate codes
+                             * */
+                            Vote resultFN = receivedFollowingNotification(recvset, outofelection, voteSet, n);
+                            if (resultFN == null) {
+                                break;
+                            } else {
+                                return resultFN;
                             }
-                        }
-                        break;
-                    case OBSERVING:
-                        LOG.debug("Notification from observer: {}", n.sid);
-                        break;
-
-                        /*
-                        * In ZOOKEEPER-3922, we separate the behaviors of FOLLOWING and LEADING.
-                        * To avoid the duplication of codes, we create a method called followingBehavior which was used to
-                        * shared by FOLLOWING and LEADING. This method returns a Vote. When the returned Vote is null, it follows
-                        * the original idea to break swtich statement; otherwise, a valid returned Vote indicates, a leader
-                        * is generated.
-                        *
-                        * The reason why we need to separate these behaviors is to make the algorithm runnable for 2-node
-                        * setting. An extra condition for generating leader is needed. Due to the majority rule, only when
-                        * there is a majority in the voteset, a leader will be generated. However, in a configuration of 2 nodes,
-                        * the number to achieve the majority remains 2, which means a recovered node cannot generate a leader which is
-                        * the existed leader. Therefore, we need the Oracle to kick in this situation. In a two-node configuration, the Oracle
-                        * only grants the permission to maintain the progress to one node. The oracle either grants the permission to the
-                        * remained node and makes it a new leader when there is a faulty machine, which is the case to maintain the progress.
-                        * Otherwise, the oracle does not grant the permission to the remained node, which further causes a service down.
-                        *
-                        * In the former case, when a failed server recovers and participate in the leader election, it would not locate a
-                        * new leader because there does not exist a majority in the voteset. It fails on the containAllQuorum() infinitely due to
-                        * two facts. First one is the fact that it does do not have a majority in the voteset. The other fact is the fact that
-                        * the oracle would not give the permission since the oracle already gave the permission to the existed leader, the healthy machine.
-                        * Logically, when the oracle replies with negative, it implies the existed leader which is LEADING notification comes from is a valid leader.
-                        * To threat this negative replies as a permission to generate the leader is the purpose to separate these two behaviors.
-                        *
-                        *
-                        * */
-                    case FOLLOWING:
-                        /*
-                        * To avoid duplicate codes
-                        * */
-                        Vote resultFN = receivedFollowingNotification(recvset, outofelection, voteSet, n);
-                        if (resultFN == null) {
+                        case LEADING:
+                            /*
+                             * In leadingBehavior(), it performs followingBehvior() first. When followingBehavior() returns
+                             * a null pointer, ask Oracle whether to follow this leader.
+                             * */
+                            Vote resultLN = receivedLeadingNotification(recvset, outofelection, voteSet, n);
+                            if (resultLN == null) {
+                                break;
+                            } else {
+                                return resultLN;
+                            }
+                        default:
+                            LOG.warn("Notification state unrecognized: {} (n.state), {}(n.sid)", n.state, n.sid);
                             break;
-                        } else {
-                            return resultFN;
-                        }
-                    case LEADING:
-                        /*
-                        * In leadingBehavior(), it performs followingBehvior() first. When followingBehavior() returns
-                        * a null pointer, ask Oracle whether to follow this leader.
-                        * */
-                        Vote resultLN = receivedLeadingNotification(recvset, outofelection, voteSet, n);
-                        if (resultLN == null) {
-                            break;
-                        } else {
-                            return resultLN;
-                        }
-                    default:
-                        LOG.warn("Notification state unrecognized: {} (n.state), {}(n.sid)", n.state, n.sid);
-                        break;
                     }
                 } else {
                     if (!validVoter(n.leader)) {
@@ -1183,18 +1194,18 @@ public class FastLeaderElection implements Election {
 
     private Vote receivedLeadingNotification(Map<Long, Vote> recvset, Map<Long, Vote> outofelection, SyncedLearnerTracker voteSet, Notification n) {
         /*
-        *
-        * In a two-node configuration, a recovery nodes cannot locate a leader because of the lack of the majority in the voteset.
-        * Therefore, it is the time for Oracle to take place as a tight breaker.
-        *
-        * */
+         *
+         * In a two-node configuration, a recovery nodes cannot locate a leader because of the lack of the majority in the voteset.
+         * Therefore, it is the time for Oracle to take place as a tight breaker.
+         *
+         * */
         Vote result = receivedFollowingNotification(recvset, outofelection, voteSet, n);
         if (result == null) {
             /*
-            * Ask Oracle to see if it is okay to follow this leader.
-            *
-            * We don't need the CheckLeader() because itself cannot be a leader candidate
-            * */
+             * Ask Oracle to see if it is okay to follow this leader.
+             *
+             * We don't need the CheckLeader() because itself cannot be a leader candidate
+             * */
             if (self.getQuorumVerifier().getNeedOracle() && !self.getQuorumVerifier().askOracle()) {
                 LOG.info("Oracle indicates to follow");
                 setPeerState(n.leader, voteSet);
@@ -1214,7 +1225,7 @@ public class FastLeaderElection implements Election {
      * Check if a given sid is represented in either the current or
      * the next voting view
      *
-     * @param sid     Server identifier
+     * @param sid Server identifier
      * @return boolean
      */
     private boolean validVoter(long sid) {

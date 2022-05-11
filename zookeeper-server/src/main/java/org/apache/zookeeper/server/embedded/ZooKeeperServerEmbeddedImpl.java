@@ -98,6 +98,7 @@ class ZooKeeperServerEmbeddedImpl implements ZooKeeperServerEmbedded {
             LOG.info("Running ZK Server in single Quorum MODE");
 
             maincluster = new QuorumPeerMain() {
+                @Override
                 protected QuorumPeer getQuorumPeer() throws SaslException {
                     return new QuorumPeer() {
                         @Override

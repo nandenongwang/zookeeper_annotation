@@ -1,42 +1,19 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server.quorum;
 
-import static java.util.Arrays.asList;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NoRouteToHostException;
 import java.net.UnknownHostException;
 import java.time.Duration;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.NoSuchElementException;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
+ * 包装了多个节点地址
  * This class allows to store several quorum and electing addresses.
- *
+ * <p>
  * See ZOOKEEPER-3188 for a discussion of this feature.
  */
 public final class MultipleAddresses {
@@ -58,7 +35,7 @@ public final class MultipleAddresses {
     }
 
     public MultipleAddresses(InetSocketAddress address) {
-        this(asList(address), DEFAULT_TIMEOUT);
+        this(Collections.singletonList(address), DEFAULT_TIMEOUT);
     }
 
     public MultipleAddresses(Collection<InetSocketAddress> addresses, Duration timeout) {
@@ -122,9 +99,9 @@ public final class MultipleAddresses {
     public InetSocketAddress getReachableAddress() throws NoRouteToHostException {
         // using parallelStream() + findAny() will help to minimize the time spent on network operations
         return addresses.parallelStream()
-          .filter(this::checkIfAddressIsReachable)
-          .findAny()
-          .orElseThrow(() -> new NoRouteToHostException("No valid address among " + addresses));
+                .filter(this::checkIfAddressIsReachable)
+                .findAny()
+                .orElseThrow(() -> new NoRouteToHostException("No valid address among " + addresses));
     }
 
     /**
@@ -135,8 +112,8 @@ public final class MultipleAddresses {
     public Set<InetSocketAddress> getAllReachableAddresses() {
         // using parallelStream() will help to minimize the time spent on network operations
         return addresses.parallelStream()
-          .filter(this::checkIfAddressIsReachable)
-          .collect(Collectors.toSet());
+                .filter(this::checkIfAddressIsReachable)
+                .collect(Collectors.toSet());
     }
 
     /**
@@ -184,13 +161,13 @@ public final class MultipleAddresses {
 
     /**
      * Performs a parallel DNS lookup for all addresses.
-     *
+     * <p>
      * If the DNS lookup fails, then address remain unmodified.
      */
     public void recreateSocketAddresses() {
         addresses = addresses.parallelStream()
-          .map(this::recreateSocketAddress)
-          .collect(Collectors.toCollection(MultipleAddresses::newConcurrentHashSet));
+                .map(this::recreateSocketAddress)
+                .collect(Collectors.toCollection(MultipleAddresses::newConcurrentHashSet));
     }
 
     /**
