@@ -58,20 +58,28 @@ public class QuorumCnxManager {
 
     private static final Logger LOG = LoggerFactory.getLogger(QuorumCnxManager.class);
 
-    /*
+    /**
+     * 接收缓冲队列最大容量
      * Maximum capacity of thread queues
      */
     static final int RECV_CAPACITY = 100;
-    // Initialized to 1 to prevent sending
-    // stale notifications to peers
+
+    /**
+     * 发送缓冲区最大容量
+     * Initialized to 1 to prevent sending
+     * stale notifications to peers
+     */
     static final int SEND_CAPACITY = 1;
 
+    /**
+     * 发送包最大大小
+     */
     static final int PACKETMAXSIZE = 1024 * 512;
 
-    /*
+    /**
+     * observer计数器
      * Negative counter for observer server ids.
      */
-
     private final AtomicLong observerCounter = new AtomicLong(-1);
 
     /*
@@ -82,12 +90,14 @@ public class QuorumCnxManager {
     // ZOOKEEPER-3188 introduced multiple addresses in the connection initiation message, released in 3.6.0
     public static final long PROTOCOL_VERSION_V2 = -65535L;
 
-    /*
+    /**
+     * 接收缓冲区大小
      * Max buffer size to be read from the network.
      */
     public static final int maxBuffer = 2048;
 
-    /*
+    /**
+     * 连接超时
      * Connection time out value in milliseconds
      */
 
@@ -102,8 +112,17 @@ public class QuorumCnxManager {
     final int socketTimeout;
     final Map<Long, QuorumPeer.QuorumServer> view;
     final boolean listenOnAllIPs;
+
+    /**
+     * 异步创建连接线程池
+     */
     private ThreadPoolExecutor connectionExecutor;
+
+    /**
+     * 正在执行中的异步创建连接serverIds
+     */
     private final Set<Long> inprogressConnections = Collections.synchronizedSet(new HashSet<>());
+
     private final QuorumAuthServer authServer;
     private final QuorumAuthLearner authLearner;
     private final boolean quorumSaslAuthEnabled;
@@ -118,9 +137,9 @@ public class QuorumCnxManager {
      * 各节点发送选票线程、缓冲区
      * Mapping from Peer to Thread number
      */
-    final ConcurrentHashMap<Long/* serverId */, SendWorker/* 发送选票线程*/> senderWorkerMap;
+    final ConcurrentHashMap<Long/* serverId */, SendWorker/* 发送消息线程*/> senderWorkerMap;
     final ConcurrentHashMap<Long/* serverId */, BlockingQueue<ByteBuffer>/* 发送缓冲区 */> queueSendMap;
-    final ConcurrentHashMap<Long/* serverId */, ByteBuffer/* 最近发送选票 */> lastMessageSent;
+    final ConcurrentHashMap<Long/* serverId */, ByteBuffer/* 最近发送消息 */> lastMessageSent;
 
     /**
      * 消息接收缓冲区
@@ -135,23 +154,26 @@ public class QuorumCnxManager {
     volatile boolean shutdown = false;
 
     /**
+     * 选举端口监听器 【监听选举端口上其他server连接创建相关资源】
      * Listener thread
      */
     public final Listener listener;
 
     /**
+     * 接收发送线程总数
      * Counter to count worker threads
      */
     private final AtomicInteger threadCnt = new AtomicInteger(0);
 
     /**
+     * 保持tcp连接
      * Socket options for TCP keepalive
      */
     private final boolean tcpKeepAlive = Boolean.getBoolean("zookeeper.tcpKeepAlive");
 
 
-    //region 创建新 Socket
-    /*
+    /**
+     * 创建新 Socket
      * Socket factory, allowing the injection of custom socket implementations for testing
      */
     static final Supplier<Socket> DEFAULT_SOCKET_FACTORY = Socket::new;
@@ -160,10 +182,9 @@ public class QuorumCnxManager {
     static void setSocketFactory(Supplier<Socket> factory) {
         SOCKET_FACTORY = factory;
     }
-    //endregion
 
     /**
-     * RPC消息
+     * RPC消息实体
      */
     @AllArgsConstructor
     public static class Message {
@@ -181,7 +202,7 @@ public class QuorumCnxManager {
     }
 
     /**
-     * 初始连接包
+     * 初始连接包实体
      * This class parses the initial identification sent out by peers with their
      * sid & hostname.
      */
@@ -321,388 +342,16 @@ public class QuorumCnxManager {
     }
 
     /**
-     * 配置异步创建连接任务线程池
-     * we always use the Connection Executor during connection initiation (to handle connection
-     * timeouts), and optionally use it during receiving connections (as the Quorum SASL authentication
-     * can take extra time)
+     * 与所有server建立连接
+     * Try to establish a connection with each server if one
+     * doesn't exist.
      */
-    private void initializeConnectionExecutor(final long mySid, final int quorumCnxnThreadsSize) {
-        final AtomicInteger threadIndex = new AtomicInteger(1);
-        SecurityManager s = System.getSecurityManager();
-        final ThreadGroup group = (s != null) ? s.getThreadGroup() : Thread.currentThread().getThreadGroup();
-
-        final ThreadFactory daemonThFactory = runnable -> new Thread(group, runnable,
-                String.format("QuorumConnectionThread-[myid=%d]-%d", mySid, threadIndex.getAndIncrement()));
-
-        this.connectionExecutor = new ThreadPoolExecutor(3, quorumCnxnThreadsSize, 60, TimeUnit.SECONDS, new SynchronousQueue<>(), daemonThFactory);
-        this.connectionExecutor.allowCoreThreadTimeOut(true);
-    }
-
-    /**
-     * Invokes initiateConnection for testing purposes
-     *
-     * @param sid
-     */
-    public void testInitiateConnection(long sid) {
-        LOG.debug("Opening channel to server {}", sid);
-        initiateConnection(self.getVotingView().get(sid).electionAddr, sid);
-    }
-
-    /**
-     * 初始化与指定serverId的连接资源
-     * First we create the socket, perform SSL handshake and authentication if needed.
-     * Then we perform the initiation protocol.
-     * If this server has initiated the connection, then it gives up on the
-     * connection if it loses challenge. Otherwise, it keeps the connection.
-     */
-    public void initiateConnection(final MultipleAddresses electionAddr, final Long sid) {
-        Socket sock = null;
-        //region 与节点地址创建Socket连接
-        try {
-            LOG.debug("Opening channel to server {}", sid);
-            if (self.isSslQuorum()) {
-                sock = self.getX509Util().createSSLSocket();
-            } else {
-                sock = SOCKET_FACTORY.get();
-            }
-            setSockOpts(sock);
-            sock.connect(electionAddr.getReachableOrOne(), cnxTO);
-            if (sock instanceof SSLSocket) {
-                SSLSocket sslSock = (SSLSocket) sock;
-                sslSock.startHandshake();
-                LOG.info("SSL handshake complete with {} - {} - {}",
-                        sslSock.getRemoteSocketAddress(),
-                        sslSock.getSession().getProtocol(),
-                        sslSock.getSession().getCipherSuite());
-            }
-
-            LOG.debug("Connected to server {} using election address: {}:{}",
-                    sid, sock.getInetAddress(), sock.getPort());
-        } catch (X509Exception e) {
-            LOG.warn("Cannot open secure channel to {} at election address {}", sid, electionAddr, e);
-            closeSocket(sock);
-            return;
-        } catch (UnresolvedAddressException | IOException e) {
-            LOG.warn("Cannot open channel to {} at election address {}", sid, electionAddr, e);
-            closeSocket(sock);
-            return;
+    public void connectAll() {
+        long sid;
+        for (Enumeration<Long> en = queueSendMap.keys(); en.hasMoreElements(); ) {
+            sid = en.nextElement();
+            connectOne(sid);
         }
-        //endregion
-
-        //region 启动连接
-        try {
-
-            startConnection(sock, sid);
-        } catch (IOException e) {
-            LOG.error(
-                    "Exception while connecting, id: {}, addr: {}, closing learner connection",
-                    sid,
-                    sock.getRemoteSocketAddress(),
-                    e);
-            closeSocket(sock);
-        }
-        //endregion
-    }
-
-    /**
-     * 异步与指定server建立连接
-     * Server will initiate the connection request to its peer server
-     * asynchronously via separate connection thread.
-     */
-    public boolean initiateConnectionAsync(final MultipleAddresses electionAddr, final Long sid) {
-        if (!inprogressConnections.add(sid)) {
-            // simply return as there is a connection request to
-            // server 'sid' already in progress.
-            LOG.debug("Connection request to server id: {} is already in progress, so skipping this request", sid);
-            return true;
-        }
-        try {
-            connectionExecutor.execute(new QuorumConnectionReqThread(electionAddr, sid));
-            connectionThreadCnt.incrementAndGet();
-        } catch (Throwable e) {
-            // Imp: Safer side catching all type of exceptions and remove 'sid'
-            // from inprogress connections. This is to avoid blocking further
-            // connection requests from this 'sid' in case of errors.
-            inprogressConnections.remove(sid);
-            LOG.error("Exception while submitting quorum connection request", e);
-            return false;
-        }
-        return true;
-    }
-
-    /**
-     * 异步与远程server建立连接线程
-     * Thread to send connection request to peer server.
-     */
-    private class QuorumConnectionReqThread extends ZooKeeperThread {
-        final MultipleAddresses electionAddr;
-        final Long sid;
-
-        QuorumConnectionReqThread(final MultipleAddresses electionAddr, final Long sid) {
-            super("QuorumConnectionReqThread-" + sid);
-            this.electionAddr = electionAddr;
-            this.sid = sid;
-        }
-
-        @Override
-        public void run() {
-            try {
-                //创建连接
-                initiateConnection(electionAddr, sid);
-            } finally {
-                inprogressConnections.remove(sid);
-            }
-        }
-
-    }
-
-    /**
-     * 启动远程server连接 【初始化发送、接受线程、缓冲区等】
-     */
-    private boolean startConnection(Socket sock, Long sid) throws IOException {
-
-        //region 发送初始包 【协议版本、本节点serverId、IP地址长度、IP地址】
-        DataOutputStream dout = null;
-        DataInputStream din = null;
-        LOG.debug("startConnection (myId:{} --> sid:{})", self.getId(), sid);
-        try {
-            // Use BufferedOutputStream to reduce the number of IP packets. This is
-            // important for x-DC scenarios.
-            BufferedOutputStream buf = new BufferedOutputStream(sock.getOutputStream());
-            dout = new DataOutputStream(buf);
-
-            // Sending id and challenge
-
-            // First sending the protocol version (in other words - message type).
-            // For backward compatibility reasons we stick to the old protocol version, unless the MultiAddress
-            // feature is enabled. During rolling upgrade, we must make sure that all the servers can
-            // understand the protocol version we use to avoid multiple partitions. see ZOOKEEPER-3720
-            long protocolVersion = self.isMultiAddressEnabled() ? PROTOCOL_VERSION_V2 : PROTOCOL_VERSION_V1;
-            dout.writeLong(protocolVersion);
-            dout.writeLong(self.getId());
-
-            // now we send our election address. For the new protocol version, we can send multiple addresses.
-            Collection<InetSocketAddress> addressesToSend = protocolVersion == PROTOCOL_VERSION_V2
-                    ? self.getElectionAddress().getAllAddresses()
-                    : Collections.singletonList(self.getElectionAddress().getOne());
-
-            String addr = addressesToSend.stream()
-                    .map(NetUtils::formatInetAddr).collect(Collectors.joining("|"));
-            byte[] addr_bytes = addr.getBytes();
-            dout.writeInt(addr_bytes.length);
-            dout.write(addr_bytes);
-            dout.flush();
-
-            din = new DataInputStream(new BufferedInputStream(sock.getInputStream()));
-        } catch (IOException e) {
-            LOG.warn("Ignoring exception reading or writing challenge: ", e);
-            closeSocket(sock);
-            return false;
-        }
-        //endregion
-
-        //region authenticate learner
-        QuorumPeer.QuorumServer qps = self.getVotingView().get(sid);
-        if (qps != null) {
-            // TODO - investigate why reconfig makes qps null.
-            authLearner.authenticate(sock, qps.hostname);
-        }
-        //endregion
-
-        //region 防止多余重复连接 【仅允许serverId大的连接小的、小的自行断开】
-        // If lost the challenge, then drop the new connection
-        if (sid > self.getId()) {
-            LOG.info("Have smaller server identifier, so dropping the connection: (myId:{} --> sid:{})", self.getId(), sid);
-            closeSocket(sock);
-            // Otherwise proceed with the connection
-        }
-        //endregion
-
-        //region 初始化并启动该远程server对应的发送、接收线程及对应缓冲区
-        else {
-            LOG.debug("Have larger server identifier, so keeping the connection: (myId:{} --> sid:{})", self.getId(), sid);
-            SendWorker sw = new SendWorker(sock, sid);
-            RecvWorker rw = new RecvWorker(sock, din, sid, sw);
-            sw.setRecv(rw);
-
-            SendWorker vsw = senderWorkerMap.get(sid);
-
-            if (vsw != null) {
-                vsw.finish();
-            }
-
-            senderWorkerMap.put(sid, sw);
-
-            queueSendMap.putIfAbsent(sid, new CircularBlockingQueue<>(SEND_CAPACITY));
-
-            sw.start();
-            rw.start();
-
-            return true;
-
-        }
-        //endregion
-
-        return false;
-    }
-
-    /**
-     * 接受连接配置相关资源
-     * If this server receives a connection request, then it gives up on the new
-     * connection if it wins. Notice that it checks whether it has a connection
-     * to this server already or not. If it does, then it sends the smallest
-     * possible long value to lose the challenge.
-     */
-    public void receiveConnection(final Socket sock) {
-        DataInputStream din = null;
-        try {
-            din = new DataInputStream(new BufferedInputStream(sock.getInputStream()));
-
-            LOG.debug("Sync handling of connection request received from: {}", sock.getRemoteSocketAddress());
-            handleConnection(sock, din);
-        } catch (IOException e) {
-            LOG.error("Exception handling connection, addr: {}, closing server connection", sock.getRemoteSocketAddress());
-            LOG.debug("Exception details: ", e);
-            closeSocket(sock);
-        }
-    }
-
-    /**
-     * 异步处理接受连接
-     * Server receives a connection request and handles it asynchronously via
-     * separate thread.
-     */
-    public void receiveConnectionAsync(final Socket sock) {
-        try {
-            LOG.debug("Async handling of connection request received from: {}", sock.getRemoteSocketAddress());
-            connectionExecutor.execute(new QuorumConnectionReceiverThread(sock));
-            connectionThreadCnt.incrementAndGet();
-        } catch (Throwable e) {
-            LOG.error("Exception handling connection, addr: {}, closing server connection", sock.getRemoteSocketAddress());
-            LOG.debug("Exception details: ", e);
-            closeSocket(sock);
-        }
-    }
-
-    /**
-     * 异步处理接收连接线程
-     * Thread to receive connection request from peer server.
-     */
-    private class QuorumConnectionReceiverThread extends ZooKeeperThread {
-
-        private final Socket sock;
-
-        QuorumConnectionReceiverThread(final Socket sock) {
-            super("QuorumConnectionReceiverThread-" + sock.getRemoteSocketAddress());
-            this.sock = sock;
-        }
-
-        @Override
-        public void run() {
-            receiveConnection(sock);
-        }
-
-    }
-
-    /**
-     * 处理初始连接包、配置相关资源
-     */
-    private void handleConnection(Socket sock, DataInputStream din) throws IOException {
-        Long sid = null, protocolVersion = null;
-        MultipleAddresses electionAddr = null;
-
-        //region 读取并解析初始连接包
-        try {
-            protocolVersion = din.readLong();
-            if (protocolVersion >= 0) { // this is a server id and not a protocol version
-                sid = protocolVersion;
-            } else {
-                try {
-                    InitialMessage init = InitialMessage.parse(protocolVersion, din);
-                    sid = init.sid;
-                    if (!init.electionAddr.isEmpty()) {
-                        electionAddr = new MultipleAddresses(init.electionAddr,
-                                Duration.ofMillis(self.getMultiAddressReachabilityCheckTimeoutMs()));
-                    }
-                    LOG.debug("Initial message parsed by {}: {}", self.getId(), init.toString());
-                } catch (InitialMessage.InitialMessageException ex) {
-                    LOG.error("Initial message parsing error!", ex);
-                    closeSocket(sock);
-                    return;
-                }
-            }
-
-            if (sid == QuorumPeer.OBSERVER_ID) {
-                /*
-                 * Choose identifier at random. We need a value to identify
-                 * the connection.
-                 */
-                sid = observerCounter.getAndDecrement();
-                LOG.info("Setting arbitrary identifier to observer: {}", sid);
-            }
-        } catch (IOException e) {
-            LOG.warn("Exception reading or writing challenge", e);
-            closeSocket(sock);
-            return;
-        }
-        //endregion
-
-        // do authenticating learner
-        authServer.authenticate(sock, din);
-
-        //region 本节点serverId大于远程serverId。需主动创建连接并设置相关资源
-        //If wins the challenge, then close the new connection.
-        if (sid < self.getId()) {
-            /*
-             * This replica might still believe that the connection to sid is
-             * up, so we have to shut down the workers before trying to open a
-             * new connection.
-             */
-            SendWorker sw = senderWorkerMap.get(sid);
-            if (sw != null) {
-                sw.finish();
-            }
-
-            /*
-             * Now we start a new connection
-             */
-            LOG.debug("Create new connection to server: {}", sid);
-            closeSocket(sock);
-
-            if (electionAddr != null) {
-                connectOne(sid, electionAddr);
-            } else {
-                connectOne(sid);
-            }
-
-        } else if (sid == self.getId()) {
-            // we saw this case in ZOOKEEPER-2164
-            LOG.warn("We got a connection request from a server with our own ID. "
-                    + "This should be either a configuration error, or a bug.");
-        }
-        //endregion
-
-        //region 本节点serverId小于远程serverId、被动创建接受、发送线程、读写缓冲区等相关资源
-        else { // Otherwise start worker threads to receive data.
-            SendWorker sw = new SendWorker(sock, sid);
-            RecvWorker rw = new RecvWorker(sock, din, sid, sw);
-            sw.setRecv(rw);
-
-            SendWorker vsw = senderWorkerMap.get(sid);
-
-            if (vsw != null) {
-                vsw.finish();
-            }
-
-            senderWorkerMap.put(sid, sw);
-
-            queueSendMap.putIfAbsent(sid, new CircularBlockingQueue<>(SEND_CAPACITY));
-
-            sw.start();
-            rw.start();
-        }
-        //endregion
-
     }
 
     /**
@@ -738,104 +387,10 @@ public class QuorumCnxManager {
     }
 
     /**
-     * 与指定serverId建立连接
-     * Try to establish a connection to server with id sid using its electionAddr.
-     * The function will return quickly and the connection will be established asynchronously.
-     * <p>
-     * VisibleForTesting.
-     *
-     * @param sid server id
-     * @return boolean success indication
-     */
-    synchronized boolean connectOne(long sid, MultipleAddresses electionAddr) {
-        //连接已经存在
-        if (senderWorkerMap.get(sid) != null) {
-            LOG.debug("There is a connection already for server {}", sid);
-            if (self.isMultiAddressEnabled() && electionAddr.size() > 1 && self.isMultiAddressReachabilityCheckEnabled()) {
-                // since ZOOKEEPER-3188 we can use multiple election addresses to reach a server. It is possible, that the
-                // one we are using is already dead and we need to clean-up, so when we will create a new connection
-                // then we will choose an other one, which is actually reachable
-                senderWorkerMap.get(sid).asyncValidateIfSocketIsStillReachable();
-            }
-            return true;
-        }
-        //创建连接
-        // we are doing connection initiation always asynchronously, since it is possible that
-        // the socket connection timeouts or the SSL handshake takes too long and don't want
-        // to keep the rest of the connections to wait
-        return initiateConnectionAsync(electionAddr, sid);
-    }
-
-    /**
-     * 与指定远程server建立连接
-     * Try to establish a connection to server with id sid.
-     * The function will return quickly and the connection will be established asynchronously.
-     *
-     * @param sid server id
-     */
-    synchronized void connectOne(long sid) {
-        //region 连接已经存在、无需重复创建
-        if (senderWorkerMap.get(sid) != null) {
-            LOG.debug("There is a connection already for server {}", sid);
-            if (self.isMultiAddressEnabled() && self.isMultiAddressReachabilityCheckEnabled()) {
-                // since ZOOKEEPER-3188 we can use multiple election addresses to reach a server. It is possible, that the
-                // one we are using is already dead and we need to clean-up, so when we will create a new connection
-                // then we will choose an other one, which is actually reachable
-                senderWorkerMap.get(sid).asyncValidateIfSocketIsStillReachable();
-            }
-            return;
-        }
-        //endregion
-
-        synchronized (self.QV_LOCK) {
-            boolean knownId = false;
-            //防止server IP地址改变、连接前先解析serverId地址
-            // Resolve hostname for the remote server before attempting to
-            // connect in case the underlying ip address has changed.
-            self.recreateSocketAddresses(sid);
-            Map<Long, QuorumPeer.QuorumServer> lastCommittedView = self.getView();
-            QuorumVerifier lastSeenQV = self.getLastSeenQuorumVerifier();
-            Map<Long, QuorumPeer.QuorumServer> lastProposedView = lastSeenQV.getAllMembers();
-            if (lastCommittedView.containsKey(sid)) {
-                knownId = true;
-                LOG.debug("Server {} knows {} already, it is in the lastCommittedView", self.getId(), sid);
-                if (connectOne(sid, lastCommittedView.get(sid).electionAddr)) {
-                    return;
-                }
-            }
-            if (lastProposedView.containsKey(sid)
-                    && (!knownId || !lastProposedView.get(sid).electionAddr.equals(lastCommittedView.get(sid).electionAddr))) {
-                knownId = true;
-                LOG.debug("Server {} knows {} already, it is in the lastProposedView", self.getId(), sid);
-
-                if (connectOne(sid, lastProposedView.get(sid).electionAddr)) {
-                    return;
-                }
-            }
-            if (!knownId) {
-                LOG.warn("Invalid server id: {} ", sid);
-            }
-        }
-    }
-
-    /**
-     * 与所有server建立连接
-     * Try to establish a connection with each server if one
-     * doesn't exist.
-     */
-    public void connectAll() {
-        long sid;
-        for (Enumeration<Long> en = queueSendMap.keys(); en.hasMoreElements(); ) {
-            sid = en.nextElement();
-            connectOne(sid);
-        }
-    }
-
-    /**
      * 检查发送缓冲是否为空 【判断消息是否已经发送完毕】
      * Check if all queues are empty, indicating that all messages have been delivered.
      */
-    boolean haveDelivered() {
+    public boolean haveDelivered() {
         for (BlockingQueue<ByteBuffer> queue : queueSendMap.values()) {
             final int queueSize = queue.size();
             LOG.debug("Queue size: {}", queueSize);
@@ -847,95 +402,10 @@ public class QuorumCnxManager {
         return false;
     }
 
-    /**
-     * Flag that it is time to wrap up all activities and interrupt the listener.
-     */
-    public void halt() {
-        shutdown = true;
-        LOG.debug("Halting listener");
-        listener.halt();
-
-        // Wait for the listener to terminate.
-        try {
-            listener.join();
-        } catch (InterruptedException ex) {
-            LOG.warn("Got interrupted before joining the listener", ex);
-        }
-        softHalt();
-
-        // clear data structures used for auth
-        if (connectionExecutor != null) {
-            connectionExecutor.shutdown();
-        }
-        inprogressConnections.clear();
-        resetConnectionThreadCount();
-    }
+    //region 被动接受远程连接
 
     /**
-     * A soft halt simply finishes workers.
-     */
-    public void softHalt() {
-        for (SendWorker sw : senderWorkerMap.values()) {
-            LOG.debug("Server {} is soft-halting sender towards: {}", self.getId(), sw);
-            sw.finish();
-        }
-    }
-
-    /**
-     * 设置常规socket配置
-     * Helper method to set socket options.
-     *
-     * @param sock Reference to socket
-     */
-    private void setSockOpts(Socket sock) throws SocketException {
-        sock.setTcpNoDelay(true);
-        sock.setKeepAlive(tcpKeepAlive);
-        sock.setSoTimeout(this.socketTimeout);
-    }
-
-    /**
-     * 关闭socket
-     * Helper method to close a socket.
-     *
-     * @param sock Reference to socket
-     */
-    private void closeSocket(Socket sock) {
-        if (sock == null) {
-            return;
-        }
-
-        try {
-            sock.close();
-        } catch (IOException ie) {
-            LOG.error("Exception while closing", ie);
-        }
-    }
-
-    /**
-     * 所有发送接受线程数量
-     * Return number of worker threads
-     */
-    public long getThreadCount() {
-        return threadCnt.get();
-    }
-
-    /**
-     * 获取正在异步连接的线程数
-     * Return number of connection processing threads.
-     */
-    public long getConnectionThreadCount() {
-        return connectionThreadCnt.get();
-    }
-
-    /**
-     * 重置正在异步连接的线程数
-     * Reset the value of connection processing threads count to zero.
-     */
-    private void resetConnectionThreadCount() {
-        connectionThreadCnt.set(0);
-    }
-
-    /**
+     * 接受连接线程 【监听选举端口接受远程server连接】
      * Thread to listen on some ports
      */
     public class Listener extends ZooKeeperThread {
@@ -1056,9 +526,9 @@ public class QuorumCnxManager {
         class ListenerHandler implements Runnable, Closeable {
             private ServerSocket serverSocket;
             private InetSocketAddress address;
-            private boolean portUnification;
-            private boolean sslQuorum;
-            private CountDownLatch latch;
+            private final boolean portUnification;
+            private final boolean sslQuorum;
+            private final CountDownLatch latch;
 
             ListenerHandler(InetSocketAddress address, boolean portUnification, boolean sslQuorum, CountDownLatch latch) {
                 this.address = address;
@@ -1184,9 +654,470 @@ public class QuorumCnxManager {
     }
 
     /**
-     * 发送RPC消息线程
+     * 同步处理接受连接
+     * If this server receives a connection request, then it gives up on the new
+     * connection if it wins. Notice that it checks whether it has a connection
+     * to this server already or not. If it does, then it sends the smallest
+     * possible long value to lose the challenge.
      */
+    public void receiveConnection(final Socket sock) {
+        DataInputStream din = null;
+        try {
+            din = new DataInputStream(new BufferedInputStream(sock.getInputStream()));
+
+            LOG.debug("Sync handling of connection request received from: {}", sock.getRemoteSocketAddress());
+            handleConnection(sock, din);
+        } catch (IOException e) {
+            LOG.error("Exception handling connection, addr: {}, closing server connection", sock.getRemoteSocketAddress());
+            LOG.debug("Exception details: ", e);
+            closeSocket(sock);
+        }
+    }
+
     /**
+     * 异步处理接受连接
+     * Server receives a connection request and handles it asynchronously via
+     * separate thread.
+     */
+    public void receiveConnectionAsync(final Socket sock) {
+        try {
+            LOG.debug("Async handling of connection request received from: {}", sock.getRemoteSocketAddress());
+            connectionExecutor.execute(new QuorumConnectionReceiverThread(sock));
+            connectionThreadCnt.incrementAndGet();
+        } catch (Throwable e) {
+            LOG.error("Exception handling connection, addr: {}, closing server connection", sock.getRemoteSocketAddress());
+            LOG.debug("Exception details: ", e);
+            closeSocket(sock);
+        }
+    }
+
+    /**
+     * 异步处理接受连接线程
+     * Thread to receive connection request from peer server.
+     */
+    private class QuorumConnectionReceiverThread extends ZooKeeperThread {
+
+        private final Socket sock;
+
+        QuorumConnectionReceiverThread(final Socket sock) {
+            super("QuorumConnectionReceiverThread-" + sock.getRemoteSocketAddress());
+            this.sock = sock;
+        }
+
+        @Override
+        public void run() {
+            receiveConnection(sock);
+        }
+
+    }
+
+    /**
+     * 处理接受的连接、解析初始连接包、配置读写线程及缓冲区等相关资源
+     */
+    private void handleConnection(Socket sock, DataInputStream din) throws IOException {
+        Long sid = null, protocolVersion = null;
+        MultipleAddresses electionAddr = null;
+
+        //region 读取并解析初始连接包
+        try {
+            protocolVersion = din.readLong();
+            if (protocolVersion >= 0) { // this is a server id and not a protocol version
+                sid = protocolVersion;
+            } else {
+                try {
+                    InitialMessage init = InitialMessage.parse(protocolVersion, din);
+                    sid = init.sid;
+                    if (!init.electionAddr.isEmpty()) {
+                        electionAddr = new MultipleAddresses(init.electionAddr,
+                                Duration.ofMillis(self.getMultiAddressReachabilityCheckTimeoutMs()));
+                    }
+                    LOG.debug("Initial message parsed by {}: {}", self.getId(), init.toString());
+                } catch (InitialMessage.InitialMessageException ex) {
+                    LOG.error("Initial message parsing error!", ex);
+                    closeSocket(sock);
+                    return;
+                }
+            }
+
+            if (sid == QuorumPeer.OBSERVER_ID) {
+                /*
+                 * Choose identifier at random. We need a value to identify
+                 * the connection.
+                 */
+                sid = observerCounter.getAndDecrement();
+                LOG.info("Setting arbitrary identifier to observer: {}", sid);
+            }
+        } catch (IOException e) {
+            LOG.warn("Exception reading or writing challenge", e);
+            closeSocket(sock);
+            return;
+        }
+        //endregion
+
+        // do authenticating learner
+        authServer.authenticate(sock, din);
+
+        //region 本节点serverId大于远程serverId。需主动创建连接并设置相关资源
+        //If wins the challenge, then close the new connection.
+        if (sid < self.getId()) {
+            /*
+             * This replica might still believe that the connection to sid is
+             * up, so we have to shut down the workers before trying to open a
+             * new connection.
+             */
+            SendWorker sw = senderWorkerMap.get(sid);
+            if (sw != null) {
+                sw.finish();
+            }
+
+            /*
+             * Now we start a new connection
+             */
+            LOG.debug("Create new connection to server: {}", sid);
+            closeSocket(sock);
+
+            if (electionAddr != null) {
+                connectOne(sid, electionAddr);
+            } else {
+                connectOne(sid);
+            }
+
+        } else if (sid == self.getId()) {
+            // we saw this case in ZOOKEEPER-2164
+            LOG.warn("We got a connection request from a server with our own ID. "
+                    + "This should be either a configuration error, or a bug.");
+        }
+        //endregion
+
+        //region 本节点serverId小于远程serverId、被动创建接受、发送线程、读写缓冲区等相关资源
+        else { // Otherwise start worker threads to receive data.
+            SendWorker sw = new SendWorker(sock, sid);
+            RecvWorker rw = new RecvWorker(sock, din, sid, sw);
+            sw.setRecv(rw);
+
+            SendWorker vsw = senderWorkerMap.get(sid);
+
+            if (vsw != null) {
+                vsw.finish();
+            }
+
+            senderWorkerMap.put(sid, sw);
+
+            queueSendMap.putIfAbsent(sid, new CircularBlockingQueue<>(SEND_CAPACITY));
+
+            sw.start();
+            rw.start();
+        }
+        //endregion
+
+    }
+
+    //endregion
+
+    //region 主动创建远程连接
+
+    /**
+     * 配置异步主动创建连接任务线程池
+     * we always use the Connection Executor during connection initiation (to handle connection
+     * timeouts), and optionally use it during receiving connections (as the Quorum SASL authentication
+     * can take extra time)
+     */
+    private void initializeConnectionExecutor(final long mySid, final int quorumCnxnThreadsSize) {
+        final AtomicInteger threadIndex = new AtomicInteger(1);
+        SecurityManager s = System.getSecurityManager();
+        final ThreadGroup group = (s != null) ? s.getThreadGroup() : Thread.currentThread().getThreadGroup();
+
+        final ThreadFactory daemonThFactory = runnable -> new Thread(group, runnable,
+                String.format("QuorumConnectionThread-[myid=%d]-%d", mySid, threadIndex.getAndIncrement()));
+
+        this.connectionExecutor = new ThreadPoolExecutor(3, quorumCnxnThreadsSize, 60, TimeUnit.SECONDS, new SynchronousQueue<>(), daemonThFactory);
+        this.connectionExecutor.allowCoreThreadTimeOut(true);
+    }
+
+    /**
+     * 异步主动建立连接
+     * Server will initiate the connection request to its peer server
+     * asynchronously via separate connection thread.
+     */
+    public boolean initiateConnectionAsync(final MultipleAddresses electionAddr, final Long sid) {
+        if (!inprogressConnections.add(sid)) {
+            // simply return as there is a connection request to
+            // server 'sid' already in progress.
+            LOG.debug("Connection request to server id: {} is already in progress, so skipping this request", sid);
+            return true;
+        }
+        try {
+            connectionExecutor.execute(new QuorumConnectionReqThread(electionAddr, sid));
+            connectionThreadCnt.incrementAndGet();
+        } catch (Throwable e) {
+            // Imp: Safer side catching all type of exceptions and remove 'sid'
+            // from inprogress connections. This is to avoid blocking further
+            // connection requests from this 'sid' in case of errors.
+            inprogressConnections.remove(sid);
+            LOG.error("Exception while submitting quorum connection request", e);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * 异步主动创建连接线程
+     * Thread to send connection request to peer server.
+     */
+    private class QuorumConnectionReqThread extends ZooKeeperThread {
+        final MultipleAddresses electionAddr;
+        final Long sid;
+
+        QuorumConnectionReqThread(final MultipleAddresses electionAddr, final Long sid) {
+            super("QuorumConnectionReqThread-" + sid);
+            this.electionAddr = electionAddr;
+            this.sid = sid;
+        }
+
+        @Override
+        public void run() {
+            try {
+                //创建连接
+                initiateConnection(electionAddr, sid);
+            } finally {
+                inprogressConnections.remove(sid);
+            }
+        }
+
+    }
+
+    /**
+     * 同步与指定远程server建立连接
+     * Try to establish a connection to server with id sid.
+     * The function will return quickly and the connection will be established asynchronously.
+     *
+     * @param sid server id
+     */
+    synchronized void connectOne(long sid) {
+        //region 连接已经存在、无需重复创建
+        if (senderWorkerMap.get(sid) != null) {
+            LOG.debug("There is a connection already for server {}", sid);
+            if (self.isMultiAddressEnabled() && self.isMultiAddressReachabilityCheckEnabled()) {
+                // since ZOOKEEPER-3188 we can use multiple election addresses to reach a server. It is possible, that the
+                // one we are using is already dead and we need to clean-up, so when we will create a new connection
+                // then we will choose an other one, which is actually reachable
+                senderWorkerMap.get(sid).asyncValidateIfSocketIsStillReachable();
+            }
+            return;
+        }
+        //endregion
+
+        synchronized (self.QV_LOCK) {
+            boolean knownId = false;
+            //防止server IP地址改变、连接前先解析serverId地址
+            // Resolve hostname for the remote server before attempting to
+            // connect in case the underlying ip address has changed.
+            self.recreateSocketAddresses(sid);
+            Map<Long, QuorumPeer.QuorumServer> lastCommittedView = self.getView();
+            QuorumVerifier lastSeenQV = self.getLastSeenQuorumVerifier();
+            Map<Long, QuorumPeer.QuorumServer> lastProposedView = lastSeenQV.getAllMembers();
+            if (lastCommittedView.containsKey(sid)) {
+                knownId = true;
+                LOG.debug("Server {} knows {} already, it is in the lastCommittedView", self.getId(), sid);
+                if (connectOne(sid, lastCommittedView.get(sid).electionAddr)) {
+                    return;
+                }
+            }
+            if (lastProposedView.containsKey(sid)
+                    && (!knownId || !lastProposedView.get(sid).electionAddr.equals(lastCommittedView.get(sid).electionAddr))) {
+                knownId = true;
+                LOG.debug("Server {} knows {} already, it is in the lastProposedView", self.getId(), sid);
+
+                if (connectOne(sid, lastProposedView.get(sid).electionAddr)) {
+                    return;
+                }
+            }
+            if (!knownId) {
+                LOG.warn("Invalid server id: {} ", sid);
+            }
+        }
+    }
+
+    /**
+     * 同步与指定server指定地址建立连接
+     * Try to establish a connection to server with id sid using its electionAddr.
+     * The function will return quickly and the connection will be established asynchronously.
+     * <p>
+     * VisibleForTesting.
+     *
+     * @param sid server id
+     * @return boolean success indication
+     */
+    synchronized boolean connectOne(long sid, MultipleAddresses electionAddr) {
+        //连接已经存在
+        if (senderWorkerMap.get(sid) != null) {
+            LOG.debug("There is a connection already for server {}", sid);
+            if (self.isMultiAddressEnabled() && electionAddr.size() > 1 && self.isMultiAddressReachabilityCheckEnabled()) {
+                // since ZOOKEEPER-3188 we can use multiple election addresses to reach a server. It is possible, that the
+                // one we are using is already dead and we need to clean-up, so when we will create a new connection
+                // then we will choose an other one, which is actually reachable
+                senderWorkerMap.get(sid).asyncValidateIfSocketIsStillReachable();
+            }
+            return true;
+        }
+        //创建连接
+        // we are doing connection initiation always asynchronously, since it is possible that
+        // the socket connection timeouts or the SSL handshake takes too long and don't want
+        // to keep the rest of the connections to wait
+        return initiateConnectionAsync(electionAddr, sid);
+    }
+
+    /**
+     * 初始化与指定serverId的连接 【创建socket并启动连接】
+     * First we create the socket, perform SSL handshake and authentication if needed.
+     * Then we perform the initiation protocol.
+     * If this server has initiated the connection, then it gives up on the
+     * connection if it loses challenge. Otherwise, it keeps the connection.
+     */
+    public void initiateConnection(final MultipleAddresses electionAddr, final Long sid) {
+        Socket sock = null;
+        //region 与节点地址创建Socket连接
+        try {
+            LOG.debug("Opening channel to server {}", sid);
+            if (self.isSslQuorum()) {
+                sock = self.getX509Util().createSSLSocket();
+            } else {
+                sock = SOCKET_FACTORY.get();
+            }
+            setSockOpts(sock);
+            sock.connect(electionAddr.getReachableOrOne(), cnxTO);
+            if (sock instanceof SSLSocket) {
+                SSLSocket sslSock = (SSLSocket) sock;
+                sslSock.startHandshake();
+                LOG.info("SSL handshake complete with {} - {} - {}",
+                        sslSock.getRemoteSocketAddress(),
+                        sslSock.getSession().getProtocol(),
+                        sslSock.getSession().getCipherSuite());
+            }
+
+            LOG.debug("Connected to server {} using election address: {}:{}",
+                    sid, sock.getInetAddress(), sock.getPort());
+        } catch (X509Exception e) {
+            LOG.warn("Cannot open secure channel to {} at election address {}", sid, electionAddr, e);
+            closeSocket(sock);
+            return;
+        } catch (UnresolvedAddressException | IOException e) {
+            LOG.warn("Cannot open channel to {} at election address {}", sid, electionAddr, e);
+            closeSocket(sock);
+            return;
+        }
+        //endregion
+
+        //region 启动连接
+        try {
+
+            startConnection(sock, sid);
+        } catch (IOException e) {
+            LOG.error(
+                    "Exception while connecting, id: {}, addr: {}, closing learner connection",
+                    sid,
+                    sock.getRemoteSocketAddress(),
+                    e);
+            closeSocket(sock);
+        }
+        //endregion
+    }
+
+    /**
+     * 启动远程server连接 【发送连接创建报文、设置相关资源: 接受线程、缓冲区等】
+     */
+    private boolean startConnection(Socket sock, Long sid) throws IOException {
+
+        //region 发送初始包 【协议版本、本节点serverId、IP地址长度、IP地址】
+        DataOutputStream dout = null;
+        DataInputStream din = null;
+        LOG.debug("startConnection (myId:{} --> sid:{})", self.getId(), sid);
+        try {
+            // Use BufferedOutputStream to reduce the number of IP packets. This is
+            // important for x-DC scenarios.
+            BufferedOutputStream buf = new BufferedOutputStream(sock.getOutputStream());
+            dout = new DataOutputStream(buf);
+
+            // Sending id and challenge
+
+            // First sending the protocol version (in other words - message type).
+            // For backward compatibility reasons we stick to the old protocol version, unless the MultiAddress
+            // feature is enabled. During rolling upgrade, we must make sure that all the servers can
+            // understand the protocol version we use to avoid multiple partitions. see ZOOKEEPER-3720
+            long protocolVersion = self.isMultiAddressEnabled() ? PROTOCOL_VERSION_V2 : PROTOCOL_VERSION_V1;
+            dout.writeLong(protocolVersion);
+            dout.writeLong(self.getId());
+
+            // now we send our election address. For the new protocol version, we can send multiple addresses.
+            Collection<InetSocketAddress> addressesToSend = protocolVersion == PROTOCOL_VERSION_V2
+                    ? self.getElectionAddress().getAllAddresses()
+                    : Collections.singletonList(self.getElectionAddress().getOne());
+
+            String addr = addressesToSend.stream()
+                    .map(NetUtils::formatInetAddr).collect(Collectors.joining("|"));
+            byte[] addr_bytes = addr.getBytes();
+            dout.writeInt(addr_bytes.length);
+            dout.write(addr_bytes);
+            dout.flush();
+
+            din = new DataInputStream(new BufferedInputStream(sock.getInputStream()));
+        } catch (IOException e) {
+            LOG.warn("Ignoring exception reading or writing challenge: ", e);
+            closeSocket(sock);
+            return false;
+        }
+        //endregion
+
+        //region authenticate learner
+        QuorumPeer.QuorumServer qps = self.getVotingView().get(sid);
+        if (qps != null) {
+            // TODO - investigate why reconfig makes qps null.
+            authLearner.authenticate(sock, qps.hostname);
+        }
+        //endregion
+
+        //region 防止多余重复连接 【仅允许serverId大的连接小的、小的自行断开】
+        // If lost the challenge, then drop the new connection
+        if (sid > self.getId()) {
+            LOG.info("Have smaller server identifier, so dropping the connection: (myId:{} --> sid:{})", self.getId(), sid);
+            closeSocket(sock);
+            // Otherwise proceed with the connection
+        }
+        //endregion
+
+        //region 初始化并启动该远程server对应的发送、接收线程及对应缓冲区
+        else {
+            LOG.debug("Have larger server identifier, so keeping the connection: (myId:{} --> sid:{})", self.getId(), sid);
+            SendWorker sw = new SendWorker(sock, sid);
+            RecvWorker rw = new RecvWorker(sock, din, sid, sw);
+            sw.setRecv(rw);
+
+            SendWorker vsw = senderWorkerMap.get(sid);
+
+            if (vsw != null) {
+                vsw.finish();
+            }
+
+            senderWorkerMap.put(sid, sw);
+
+            queueSendMap.putIfAbsent(sid, new CircularBlockingQueue<>(SEND_CAPACITY));
+
+            sw.start();
+            rw.start();
+
+            return true;
+
+        }
+        //endregion
+
+        return false;
+    }
+    //endregion
+
+    //region 发送、接收消息
+
+    /**
+     * 发送RPC消息线程 【不断冲缓冲区中取出消息通过socket发送、长度+内容】
      * Thread to send messages. Instance waits on a queue, and send a message as
      * soon as there is one available. If connection breaks, then opens a new
      * one.
@@ -1528,8 +1459,6 @@ public class QuorumCnxManager {
 
     /**
      * 从接收缓冲区中取出一条消息
-     */
-    /**
      * Retrieves and removes a message at the head of this queue,
      * waiting up to the specified wait time if necessary for an element to
      * become available.
@@ -1538,6 +1467,99 @@ public class QuorumCnxManager {
      */
     public Message pollRecvQueue(final long timeout, final TimeUnit unit) throws InterruptedException {
         return this.recvQueue.poll(timeout, unit);
+    }
+    //endregion
+
+    //region close、stat、utility...
+
+    /**
+     * 关闭连接管理器
+     * Flag that it is time to wrap up all activities and interrupt the listener.
+     */
+    public void halt() {
+        shutdown = true;
+        LOG.debug("Halting listener");
+        listener.halt();
+
+        // Wait for the listener to terminate.
+        try {
+            listener.join();
+        } catch (InterruptedException ex) {
+            LOG.warn("Got interrupted before joining the listener", ex);
+        }
+        softHalt();
+
+        // clear data structures used for auth
+        if (connectionExecutor != null) {
+            connectionExecutor.shutdown();
+        }
+        inprogressConnections.clear();
+        resetConnectionThreadCount();
+    }
+
+    /**
+     * 关闭发送线程
+     * A soft halt simply finishes workers.
+     */
+    public void softHalt() {
+        for (SendWorker sw : senderWorkerMap.values()) {
+            LOG.debug("Server {} is soft-halting sender towards: {}", self.getId(), sw);
+            sw.finish();
+        }
+    }
+
+    /**
+     * 设置常规socket配置
+     * Helper method to set socket options.
+     *
+     * @param sock Reference to socket
+     */
+    private void setSockOpts(Socket sock) throws SocketException {
+        sock.setTcpNoDelay(true);
+        sock.setKeepAlive(tcpKeepAlive);
+        sock.setSoTimeout(this.socketTimeout);
+    }
+
+    /**
+     * 关闭socket
+     * Helper method to close a socket.
+     *
+     * @param sock Reference to socket
+     */
+    private void closeSocket(Socket sock) {
+        if (sock == null) {
+            return;
+        }
+
+        try {
+            sock.close();
+        } catch (IOException ie) {
+            LOG.error("Exception while closing", ie);
+        }
+    }
+
+    /**
+     * 所有发送接受线程数量
+     * Return number of worker threads
+     */
+    public long getThreadCount() {
+        return threadCnt.get();
+    }
+
+    /**
+     * 获取正在异步连接的线程数
+     * Return number of connection processing threads.
+     */
+    public long getConnectionThreadCount() {
+        return connectionThreadCnt.get();
+    }
+
+    /**
+     * 重置正在异步连接的线程数
+     * Reset the value of connection processing threads count to zero.
+     */
+    private void resetConnectionThreadCount() {
+        connectionThreadCnt.set(0);
     }
 
     public boolean connectedToPeer(long peerSid) {
@@ -1548,4 +1570,14 @@ public class QuorumCnxManager {
         return self.isReconfigEnabled();
     }
 
+    /**
+     * Invokes initiateConnection for testing purposes
+     *
+     * @param sid
+     */
+    public void testInitiateConnection(long sid) {
+        LOG.debug("Opening channel to server {}", sid);
+        initiateConnection(self.getVotingView().get(sid).electionAddr, sid);
+    }
+    //endregion
 }
