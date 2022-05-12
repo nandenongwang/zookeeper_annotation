@@ -85,10 +85,12 @@ public class TestableZooKeeper extends ZooKeeperAdmin {
         }
     }
 
+    @Override
     public SocketAddress testableLocalSocketAddress() {
         return super.testableLocalSocketAddress();
     }
 
+    @Override
     public SocketAddress testableRemoteSocketAddress() {
         return super.testableRemoteSocketAddress();
     }

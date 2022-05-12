@@ -181,16 +181,34 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
 
     public static class QuorumServer {
 
+        /**
+         * 内部节点数据同步地址
+         */
         public MultipleAddresses addr = new MultipleAddresses();
 
+        /**
+         * 内部节点选举地址
+         */
         public MultipleAddresses electionAddr = new MultipleAddresses();
 
+        /**
+         * 节点客户端连接地址
+         */
         public InetSocketAddress clientAddr = null;
 
+        /**
+         * 节点serverId
+         */
         public long id;
 
+        /**
+         * 节点主机名
+         */
         public String hostname;
 
+        /**
+         * 默认参与投票
+         */
         public LearnerType type = LearnerType.PARTICIPANT;
 
         public boolean isClientAddrFromStatic = false;
@@ -525,11 +543,12 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         TRUNC
     }
 
-    /*
+    /**
+     * 参与者【leader、follower】参与投票、观察者不参与投票
      * A peer can either be participating, which implies that it is willing to
      * both vote in instances of consensus and to elect or become a Leader, or
      * it may be observing in which case it isn't.
-     *
+     * <p>
      * We need this distinction to decide which ServerState to move to when
      * conditions change (e.g. which state to become after LOOKING).
      */
@@ -870,6 +889,9 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
 
     private boolean reconfigFlag = false; // indicates that a reconfig just committed
 
+    /**
+     * 更新当前节点角色状态
+     */
     public synchronized void setPeerState(ServerState newState) {
         state = newState;
         if (newState == ServerState.LOOKING) {
@@ -880,6 +902,9 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         }
     }
 
+    /**
+     * 更新节点zab协议状态
+     */
     public void setZabState(ZabState zabState) {
         if ((zabState == ZabState.BROADCAST) && (unavailableStartTime != 0)) {
             long unavailableTime = Time.currentElapsedTime() - unavailableStartTime;
@@ -891,6 +916,18 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         }
         this.zabState.set(zabState);
         LOG.info("Peer state changed: {}", getDetailedPeerState());
+    }
+
+    /**
+     * 更新节点leaderId、leaderAddr
+     */
+    public void setLeaderAddressAndId(MultipleAddresses addr, long newId) {
+        if (addr != null) {
+            leaderAddress.set(String.join("|", addr.getAllHostStrings()));
+        } else {
+            leaderAddress.set(null);
+        }
+        leaderId.set(newId);
     }
 
     public void setSyncMode(SyncMode syncMode) {
@@ -906,14 +943,6 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         return syncMode.get();
     }
 
-    public void setLeaderAddressAndId(MultipleAddresses addr, long newId) {
-        if (addr != null) {
-            leaderAddress.set(String.join("|", addr.getAllHostStrings()));
-        } else {
-            leaderAddress.set(null);
-        }
-        leaderId.set(newId);
-    }
 
     public String getLeaderAddress() {
         return leaderAddress.get();
@@ -1378,6 +1407,9 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         return le;
     }
 
+    /**
+     * 获取选举算法
+     */
     @SuppressWarnings("deprecation")
     protected Election makeLEStrategy() {
         LOG.debug("Initializing leader election protocol...");
@@ -1450,7 +1482,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
 
         try {
             /*
-             * Main loop
+             * 根据节点状态触发不同的维护方法
              */
             while (running) {
                 if (unavailableStartTime == 0) {
@@ -1458,11 +1490,11 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                 }
 
                 switch (getPeerState()) {
-                    //region 开启选举
+                    //region 选举状态 【开启选举】
                     case LOOKING:
                         LOG.info("LOOKING");
                         ServerMetrics.getMetrics().LOOKING_COUNT.add(1);
-
+                        //region 只读模式
                         if (Boolean.getBoolean("readonlymode.enabled")) {
                             LOG.info("Attempting to start ReadOnlyZooKeeperServer");
 
@@ -1508,16 +1540,18 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                                 roZkMgr.interrupt();
                                 roZk.shutdown();
                             }
-                        } else {
+                        }
+                        //endregion
+                        else {
                             try {
                                 reconfigFlagClear();
                                 if (shuttingDownLE) {
                                     shuttingDownLE = false;
                                     startLeaderElection();
                                 }
+                                //获取选举算法选出leader、保存为该leader投出选票
                                 Vote voteForLeader = makeLEStrategy().lookForLeader();
                                 setCurrentVote(voteForLeader);
-                                setCurrentVote(makeLEStrategy().lookForLeader());
                             } catch (Exception e) {
                                 LOG.warn("Unexpected exception", e);
                                 setPeerState(ServerState.LOOKING);
@@ -1526,7 +1560,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                         break;
                     //endregion
 
-                    //region observer状态维护方法
+                    //region observer角色状态
                     case OBSERVING:
                         try {
                             LOG.info("OBSERVING");
@@ -1548,7 +1582,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                         break;
                     //endregion
 
-                    //region follower状态维护方法
+                    //region follower角色状态
                     case FOLLOWING:
                         try {
                             LOG.info("FOLLOWING");
@@ -1564,7 +1598,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                         break;
                     //endregion
 
-                    //region leader状态维护方法
+                    //region leader角色状态
                     case LEADING:
                         LOG.info("LEADING");
                         try {

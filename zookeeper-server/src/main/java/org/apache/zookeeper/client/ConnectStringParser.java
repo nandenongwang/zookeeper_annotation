@@ -1,35 +1,20 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.client;
 
-import static org.apache.zookeeper.common.StringUtils.split;
-import java.net.InetSocketAddress;
-import java.util.ArrayList;
-import java.util.List;
 import org.apache.zookeeper.common.NetUtils;
 import org.apache.zookeeper.common.PathUtils;
 
+import java.net.InetSocketAddress;
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.apache.zookeeper.common.StringUtils.split;
+
 /**
+ * 连接字符串解析器、从类似ip1:port1,ip2:port2,ip3:port3/home解析出zkServer地址列表【ip1:port1,ip2:port2,ip3:port3】和rootPath【/home】
  * A parser for ZooKeeper Client connect strings.
- *
+ * <p>
  * This class is not meant to be seen or used outside of ZooKeeper itself.
- *
+ * <p>
  * The chrootPath member should be replaced by a Path object in issue
  * ZOOKEEPER-849.
  *
@@ -41,13 +26,13 @@ public final class ConnectStringParser {
 
     private final String chrootPath;
 
-    private final ArrayList<InetSocketAddress> serverAddresses = new ArrayList<InetSocketAddress>();
+    private final ArrayList<InetSocketAddress> serverAddresses = new ArrayList<>();
 
     /**
      * Parse host and port by spliting client connectString
      * with support for IPv6 literals
-     * @throws IllegalArgumentException
-     *             for an invalid chroot path.
+     *
+     * @throws IllegalArgumentException for an invalid chroot path.
      */
     public ConnectStringParser(String connectString) {
         // parse out chroot, if any

@@ -351,6 +351,7 @@ public class ClientCnxnSocketFragilityTest extends QuorumPeerTestBase {
             return cnxn.getState().isAlive();
         }
 
+        @Override
         ClientCnxn createConnection(
             String chrootPath,
             HostProvider hostProvider,

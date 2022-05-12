@@ -31,6 +31,7 @@ public class ReadOnlyBean extends ZooKeeperServerBean {
         super(zks);
     }
 
+    @Override
     public String getName() {
         return "ReadOnlyServer";
     }

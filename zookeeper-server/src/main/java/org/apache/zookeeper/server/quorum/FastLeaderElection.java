@@ -1,21 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server.quorum;
 
 import org.apache.zookeeper.common.Time;
@@ -95,22 +77,22 @@ public class FastLeaderElection implements Election {
     }
 
     /**
+     * 选举连接与通信管理器
      * Connection manager. Fast leader election uses TCP for
      * communication between peers, and QuorumCnxManager manages
      * such connections.
      */
-
     QuorumCnxManager manager;
 
     private SyncedLearnerTracker leadingVoteSet;
 
     /**
+     * 接收消息实体
      * Notifications are messages that let other peers know that
      * a given peer has changed its vote, either because it has
      * joined leader election or because it learned of another
      * peer with higher zxid or same zxid and higher server id
      */
-
     public static class Notification {
         /*
          * Format version, introduced in 3.4.6
@@ -156,12 +138,16 @@ public class FastLeaderElection implements Election {
     static byte[] dummyData = new byte[0];
 
     /**
+     * 发出消息实体
      * Messages that a peer wants to send to other peers.
      * These messages can be both Notifications and Acks
      * of reception of notification.
      */
     public static class ToSend {
 
+        /**
+         * 仅使用notification类型、标识是发送类消息
+         */
         enum mType {
             crequest,
             challenge,
@@ -170,47 +156,71 @@ public class FastLeaderElection implements Election {
         }
 
         ToSend(mType type, long leader, long zxid, long electionEpoch, ServerState state, long sid, long peerEpoch, byte[] configData) {
-
+            //推荐节点信息
             this.leader = leader;
             this.zxid = zxid;
+            this.peerEpoch = peerEpoch;
+
+            //
             this.electionEpoch = electionEpoch;
             this.state = state;
             this.sid = sid;
-            this.peerEpoch = peerEpoch;
+
             this.configData = configData;
         }
 
-        /*
+        /**
+         * 推荐leader
          * Proposed leader in the case of notification
-         */ long leader;
+         */
+        long leader;
 
-        /*
-         * id contains the tag for acks, and zxid for notifications
-         */ long zxid;
-
-        /*
-         * Epoch
-         */ long electionEpoch;
-
-        /*
-         * Current state;
-         */ QuorumPeer.ServerState state;
-
-        /*
-         * Address of recipient
-         */ long sid;
-
-        /*
-         * Used to send a QuorumVerifier (configuration info)
-         */ byte[] configData = dummyData;
-
-        /*
+        /**
+         * 推荐leader节点任期
          * Leader epoch
-         */ long peerEpoch;
+         */
+        long peerEpoch;
 
+        /**
+         * 推荐leader最大日志ID
+         * id contains the tag for acks, and zxid for notifications
+         */
+        long zxid;
+
+
+        /**
+         * 发送节点选举任期
+         * Epoch
+         */
+        long electionEpoch;
+
+        /**
+         * 发送节点当前选举状态
+         * Current state;
+         */
+        QuorumPeer.ServerState state;
+
+        /**
+         * 接收节点serverId
+         * Address of recipient
+         */
+        long sid;
+
+        /**
+         * 计票器配置
+         * Used to send a QuorumVerifier (configuration info)
+         */
+        byte[] configData = dummyData;
     }
 
+    /**
+     * 发送消息缓冲区
+     */
     LinkedBlockingQueue<ToSend> sendqueue;
+
+    /**
+     * 接收消息缓冲区
+     */
     LinkedBlockingQueue<Notification> recvqueue;
 
     /**
@@ -219,14 +229,12 @@ public class FastLeaderElection implements Election {
      * functionality of each is obvious from the name. Each of these
      * spawns a new thread.
      */
-
     protected class Messenger {
 
         /**
          * Receives messages from instance of QuorumCnxManager on
          * method run(), and processes such messages.
          */
-
         class WorkerReceiver extends ZooKeeperThread {
 
             volatile boolean stop;
@@ -486,10 +494,10 @@ public class FastLeaderElection implements Election {
         }
 
         /**
+         * 消息发送线程 【不断从发送缓冲队列中取出消息通过连接管理器写出】
          * This worker simply dequeues a message to send and
          * and queues it on the manager's queue.
          */
-
         class WorkerSender extends ZooKeeperThread {
 
             volatile boolean stop;
@@ -532,6 +540,7 @@ public class FastLeaderElection implements Election {
 
         }
 
+        //region
         WorkerSender ws;
         WorkerReceiver wr;
         Thread wsThread = null;
@@ -556,6 +565,7 @@ public class FastLeaderElection implements Election {
         }
 
         /**
+         * 启动发送、接收线程
          * Starts instances of WorkerSender and WorkerReceiver
          */
         void start() {
@@ -564,17 +574,22 @@ public class FastLeaderElection implements Election {
         }
 
         /**
+         * 关闭发送、接收线程
          * Stops instances of WorkerSender and WorkerReceiver
          */
         void halt() {
             this.ws.stop = true;
             this.wr.stop = true;
         }
-
+        //endregion
     }
 
     QuorumPeer self;
     Messenger messenger;
+
+    /**
+     *
+     */
     AtomicLong logicalclock = new AtomicLong(); /* Election instance */
     long proposedLeader;
     long proposedZxid;
@@ -606,11 +621,15 @@ public class FastLeaderElection implements Election {
         return requestBuffer;
     }
 
+    /**
+     * 序列化发出消息
+     */
     static ByteBuffer buildMsg(int state, long leader, long zxid, long electionEpoch, long epoch, byte[] configData) {
         byte[] requestBytes = new byte[44 + configData.length];
         ByteBuffer requestBuffer = ByteBuffer.wrap(requestBytes);
 
         /*
+         * 4+8+8+8+8+4+4=44
          * Building notification packet to send
          */
 
@@ -657,8 +676,8 @@ public class FastLeaderElection implements Election {
         proposedLeader = -1;
         proposedZxid = -1;
 
-        sendqueue = new LinkedBlockingQueue<ToSend>();
-        recvqueue = new LinkedBlockingQueue<Notification>();
+        sendqueue = new LinkedBlockingQueue<>();
+        recvqueue = new LinkedBlockingQueue<>();
         this.messenger = new Messenger(manager);
     }
 
@@ -729,6 +748,7 @@ public class FastLeaderElection implements Election {
     }
 
     /**
+     * 判断是否需要更新当前节点选票 【比较新旧选票的节点任期、日志号、serverId】
      * Check if a pair (server id, zxid) succeeds our
      * current vote.
      */
@@ -753,10 +773,8 @@ public class FastLeaderElection implements Election {
          */
 
         return ((newEpoch > curEpoch)
-                || ((newEpoch == curEpoch)
-                && ((newZxid > curZxid)
-                || ((newZxid == curZxid)
-                && (newId > curId)))));
+                || ((newEpoch == curEpoch) && ((newZxid > curZxid)
+                || ((newZxid == curZxid) && (newId > curId)))));
     }
 
     /**
@@ -858,6 +876,7 @@ public class FastLeaderElection implements Election {
     }
 
     /**
+     * 获取本机serverId 【若为observer取最小值】
      * Returns the initial vote value of server identifier.
      *
      * @return long
@@ -884,9 +903,8 @@ public class FastLeaderElection implements Election {
     }
 
     /**
+     * 获取节点当前投票任期 【参与者取当前任期、观察者取最小整数】
      * Returns the initial vote value of the peer epoch.
-     *
-     * @return long
      */
     private long getPeerEpoch() {
         if (self.getLearnerType() == LearnerType.PARTICIPANT) {
@@ -921,6 +939,7 @@ public class FastLeaderElection implements Election {
      */
     @Override
     public Vote lookForLeader() throws InterruptedException {
+        //region 选举Mbean
         try {
             self.jmxLeaderElectionBean = new LeaderElectionBean();
             MBeanRegistry.getInstance().register(self.jmxLeaderElectionBean, self.jmxLocalPeerBean);
@@ -928,6 +947,7 @@ public class FastLeaderElection implements Election {
             LOG.warn("Failed to register with JMX", e);
             self.jmxLeaderElectionBean = null;
         }
+        //endregion
 
         self.start_fle = Time.currentElapsedTime();
         try {
@@ -949,25 +969,29 @@ public class FastLeaderElection implements Election {
 
             int notTimeout = minNotificationInterval;
 
+            //region 设置首次给自己投票
             synchronized (this) {
                 logicalclock.incrementAndGet();
-                updateProposal(getInitId(), getInitLastLoggedZxid(), getPeerEpoch());
+                updateProposal(getInitId()/* 本节点serverId */, getInitLastLoggedZxid()/* 本节点最大日志ID */, getPeerEpoch()/* 本节点节点任期、初始-1或上次退出时持久化任期*/);
             }
+            //endregion
 
+            //region 向所有参与投票节点发送选票
             LOG.info(
                     "New election. My id = {}, proposed zxid=0x{}",
                     self.getId(),
                     Long.toHexString(proposedZxid));
             sendNotifications();
+            //endregion
 
             SyncedLearnerTracker voteSet = null;
 
             /*
              * Loop in which we exchange notifications until we find a leader
              */
-
             while ((self.getPeerState() == ServerState.LOOKING) && (!stop)) {
                 /*
+                 * 取出收到的选票消息进行处理
                  * Remove next notification from queue, times out after 2 times
                  * the termination time
                  */
@@ -1011,7 +1035,9 @@ public class FastLeaderElection implements Election {
                      * Only proceed if the vote comes from a replica in the current or next
                      * voting view for a replica in the current or next voting view.
                      */
+                    //发送节点状态
                     switch (n.state) {
+                        //region 选举中
                         case LOOKING:
                             if (getInitLastLoggedZxid() == -1) {
                                 LOG.debug("Ignoring notification as our zxid is -1");
@@ -1021,6 +1047,16 @@ public class FastLeaderElection implements Election {
                                 LOG.debug("Ignoring notification from member with -1 zxid {}", n.sid);
                                 break;
                             }
+
+                            //region 比较更新选举轮次与意向选票
+                            /*
+                             * 1、发送节点选举轮次大于当前节点:
+                             * 跟新本节点选举轮次、比较并更新本节点意向选票、向其他节点广播本节点选票
+                             * 2、发送节点选举轮次小于当前节点:
+                             * 忽略该选票、
+                             * 3、发送节点选举轮次等于当前节点:
+                             * 比较并更新本节点意向选票、向其他节点广播本节点选票
+                             */
                             // If notification > current, replace and send messages out
                             if (n.electionEpoch > logicalclock.get()) {
                                 logicalclock.set(n.electionEpoch);
@@ -1041,6 +1077,7 @@ public class FastLeaderElection implements Election {
                                 updateProposal(n.leader, n.zxid, n.peerEpoch);
                                 sendNotifications();
                             }
+                            //endregion
 
                             LOG.debug(
                                     "Adding vote: from={}, proposed leader={}, proposed zxid=0x{}, proposed election epoch=0x{}",
@@ -1056,6 +1093,7 @@ public class FastLeaderElection implements Election {
 
                             if (voteSet.hasAllQuorums()) {
 
+                                //region 遍历选票接收缓冲中剩余的选票、判断是否还有更适合的leader、有则重新放回重新处理
                                 // Verify if there is any change in the proposed leader
                                 while ((n = recvqueue.poll(finalizeWait, TimeUnit.MILLISECONDS)) != null) {
                                     if (totalOrderPredicate(n.leader, n.zxid, n.peerEpoch, proposedLeader, proposedZxid, proposedEpoch)) {
@@ -1063,6 +1101,7 @@ public class FastLeaderElection implements Election {
                                         break;
                                     }
                                 }
+                                //endregion
 
                                 /*
                                  * This predicate is true once we don't read any new
@@ -1076,9 +1115,13 @@ public class FastLeaderElection implements Election {
                                 }
                             }
                             break;
+                        //endregion
+
+                        //region observer中 【observer不参与选举、跳过】
                         case OBSERVING:
                             LOG.debug("Notification from observer: {}", n.sid);
                             break;
+                        //endregion
 
                         /*
                          * In ZOOKEEPER-3922, we separate the behaviors of FOLLOWING and LEADING.
@@ -1105,6 +1148,8 @@ public class FastLeaderElection implements Election {
                          *
                          *
                          * */
+
+                        //region follower中
                         case FOLLOWING:
                             /*
                              * To avoid duplicate codes
@@ -1115,6 +1160,9 @@ public class FastLeaderElection implements Election {
                             } else {
                                 return resultFN;
                             }
+                            //endregion
+
+                            //region leader中
                         case LEADING:
                             /*
                              * In leadingBehavior(), it performs followingBehvior() first. When followingBehavior() returns
@@ -1126,6 +1174,8 @@ public class FastLeaderElection implements Election {
                             } else {
                                 return resultLN;
                             }
+                            //endregion
+
                         default:
                             LOG.warn("Notification state unrecognized: {} (n.state), {}(n.sid)", n.state, n.sid);
                             break;
@@ -1153,6 +1203,9 @@ public class FastLeaderElection implements Election {
         }
     }
 
+    /**
+     * 接收到follower消息
+     */
     private Vote receivedFollowingNotification(Map<Long, Vote> recvset, Map<Long, Vote> outofelection, SyncedLearnerTracker voteSet, Notification n) {
         /*
          * Consider all notifications from the same epoch
@@ -1192,6 +1245,9 @@ public class FastLeaderElection implements Election {
         return null;
     }
 
+    /**
+     * 接收到leader消息
+     */
     private Vote receivedLeadingNotification(Map<Long, Vote> recvset, Map<Long, Vote> outofelection, SyncedLearnerTracker voteSet, Notification n) {
         /*
          *
