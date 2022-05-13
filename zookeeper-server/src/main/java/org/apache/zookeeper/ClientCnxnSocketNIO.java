@@ -1,43 +1,22 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper;
 
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.Socket;
-import java.net.SocketAddress;
-import java.nio.ByteBuffer;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.channels.SocketChannel;
-import java.nio.channels.UnresolvedAddressException;
-import java.nio.channels.UnsupportedAddressTypeException;
-import java.util.Iterator;
-import java.util.Queue;
-import java.util.Set;
-import java.util.concurrent.LinkedBlockingDeque;
 import org.apache.zookeeper.ClientCnxn.EndOfStreamException;
 import org.apache.zookeeper.ClientCnxn.Packet;
 import org.apache.zookeeper.ZooDefs.OpCode;
 import org.apache.zookeeper.client.ZKClientConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.SocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.channels.*;
+import java.util.Iterator;
+import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.LinkedBlockingDeque;
 
 public class ClientCnxnSocketNIO extends ClientCnxnSocket {
 
@@ -74,8 +53,8 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
             int rc = sock.read(incomingBuffer);
             if (rc < 0) {
                 throw new EndOfStreamException("Unable to read additional data from server sessionid 0x"
-                                               + Long.toHexString(sessionId)
-                                               + ", likely server has closed socket");
+                        + Long.toHexString(sessionId)
+                        + ", likely server has closed socket");
             }
             if (!incomingBuffer.hasRemaining()) {
                 incomingBuffer.flip();
@@ -110,8 +89,8 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                 // If we already started writing p, p.bb will already exist
                 if (p.bb == null) {
                     if ((p.requestHeader != null)
-                        && (p.requestHeader.getType() != OpCode.ping)
-                        && (p.requestHeader.getType() != OpCode.auth)) {
+                            && (p.requestHeader.getType() != OpCode.ping)
+                            && (p.requestHeader.getType() != OpCode.auth)) {
                         p.requestHeader.setXid(cnxn.getXid());
                     }
                     p.createBB();
@@ -121,8 +100,8 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                     sentCount.getAndIncrement();
                     outgoingQueue.removeFirstOccurrence(p);
                     if (p.requestHeader != null
-                        && p.requestHeader.getType() != OpCode.ping
-                        && p.requestHeader.getType() != OpCode.auth) {
+                            && p.requestHeader.getType() != OpCode.ping
+                            && p.requestHeader.getType() != OpCode.auth) {
                         synchronized (pendingQueue) {
                             pendingQueue.add(p);
                         }
@@ -236,9 +215,8 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
     }
 
     /**
-     * create a socket channel.
-     * @return the created socket channel
-     * @throws IOException
+     * 创建客户端socket channel
+     * create a socket channel
      */
     SocketChannel createSock() throws IOException {
         SocketChannel sock;
@@ -251,6 +229,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
 
     /**
      * register with the selection and connect
+     *
      * @param sock the {@link SocketChannel}
      * @param addr the address of remote host
      * @throws IOException
@@ -286,7 +265,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
      * Returns the address to which the socket is connected.
      *
      * @return ip address of the remote side of the connection or null if not
-     *         connected
+     * connected
      */
     @Override
     SocketAddress getRemoteSocketAddress() {
@@ -297,7 +276,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
      * Returns the local address to which the socket is bound.
      *
      * @return ip address of the remote side of the connection or null if not
-     *         connected
+     * connected
      */
     @Override
     SocketAddress getLocalSocketAddress() {
@@ -325,10 +304,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
     }
 
     @Override
-    void doTransport(
-        int waitTimeOut,
-        Queue<Packet> pendingQueue,
-        ClientCnxn cnxn) throws IOException, InterruptedException {
+    void doTransport(int waitTimeOut, Queue<Packet> pendingQueue, ClientCnxn cnxn) throws IOException, InterruptedException {
         selector.select(waitTimeOut);
         Set<SelectionKey> selected;
         synchronized (this) {
@@ -375,6 +351,9 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         enableWrite();
     }
 
+    /**
+     * 开启写事件关注
+     */
     synchronized void enableWrite() {
         int i = sockKey.interestOps();
         if ((i & SelectionKey.OP_WRITE) == 0) {
@@ -382,6 +361,9 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         }
     }
 
+    /**
+     * 取消写事件关注
+     */
     private synchronized void disableWrite() {
         int i = sockKey.interestOps();
         if ((i & SelectionKey.OP_WRITE) != 0) {
@@ -389,6 +371,9 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         }
     }
 
+    /**
+     * 开启读事件关注
+     */
     private synchronized void enableRead() {
         int i = sockKey.interestOps();
         if ((i & SelectionKey.OP_READ) == 0) {
@@ -396,6 +381,9 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         }
     }
 
+    /**
+     * 关注读写事件
+     */
     @Override
     void connectionPrimed() {
         sockKey.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
@@ -405,6 +393,9 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         return selector;
     }
 
+    /**
+     * 序列化请求包并通过socket写出
+     */
     @Override
     void sendPacket(Packet p) throws IOException {
         SocketChannel sock = (SocketChannel) sockKey.channel();
