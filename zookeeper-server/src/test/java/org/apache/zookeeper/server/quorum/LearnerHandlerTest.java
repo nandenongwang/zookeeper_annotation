@@ -58,6 +58,7 @@ public class LearnerHandlerTest extends ZKTestCase {
             super(sock, new BufferedInputStream(sock.getInputStream()), leader);
         }
 
+        @Override
         protected void startSendingPackets() {
             threadStarted = true;
         }

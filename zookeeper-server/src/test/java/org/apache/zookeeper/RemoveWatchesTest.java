@@ -968,6 +968,7 @@ public class RemoveWatchesTest extends ClientBase {
             super(disableAutoWatchReset, defaultWatcher);
         }
 
+        @Override
         void containsWatcher(String path, Watcher watcher, WatcherType watcherType) {
             // prevent contains watcher
         }

@@ -102,6 +102,7 @@ public class LearnerTest extends ZKTestCase {
             passSocketConnectOnAttempt = num;
         }
 
+        @Override
         protected long nanoTime() {
             return socketConnectAttempt * timeMultiplier;
         }

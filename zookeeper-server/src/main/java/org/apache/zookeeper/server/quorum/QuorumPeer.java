@@ -179,6 +179,9 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         LOG.info("multiAddress.reachabilityCheckEnabled set to {}", multiAddressReachabilityCheckEnabled);
     }
 
+    /**
+     * 存储投票节点各种地址信息
+     */
     public static class QuorumServer {
 
         /**
@@ -738,6 +741,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     protected boolean quorumListenOnAllIPs = false;
 
     /**
+     * 选举花费时间
      * Keeps time taken for leader election in milliseconds. Sets the value to
      * this variable only after the completion of leader election.
      */
@@ -1344,6 +1348,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     }
 
     /**
+     * 获取节点最后日志ID
      * returns the highest zxid that this host has seen
      *
      * @return the highest zxid for this host
@@ -1355,6 +1360,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         return zkDb.getDataTreeLastProcessedZxid();
     }
 
+    //region 创建数据同步leader、follower、observer角色
     public Follower follower;
     public Leader leader;
     public Observer observer;
@@ -1370,6 +1376,8 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     protected Observer makeObserver(FileTxnSnapLog logFactory) throws IOException {
         return new Observer(this, new ObserverZooKeeperServer(logFactory, this, this.zkDb));
     }
+    //endregion
+
 
     /**
      * 根据算法类型创建选举算法
@@ -1564,8 +1572,9 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                     case OBSERVING:
                         try {
                             LOG.info("OBSERVING");
-                            setObserver(makeObserver(logFactory));
-                            observer.observeLeader();
+                            Observer observer = makeObserver(logFactory);
+                            setObserver(observer);
+                            this.observer.observeLeader();
                         } catch (Exception e) {
                             LOG.warn("Unexpected exception", e);
                         } finally {
@@ -1586,8 +1595,9 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                     case FOLLOWING:
                         try {
                             LOG.info("FOLLOWING");
-                            setFollower(makeFollower(logFactory));
-                            follower.followLeader();
+                            Follower follower = makeFollower(logFactory);
+                            setFollower(follower);
+                            this.follower.followLeader();
                         } catch (Exception e) {
                             LOG.warn("Unexpected exception", e);
                         } finally {
@@ -1602,8 +1612,9 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                     case LEADING:
                         LOG.info("LEADING");
                         try {
-                            setLeader(makeLeader(logFactory));
-                            leader.lead();
+                            Leader leader = makeLeader(logFactory);
+                            setLeader(leader);
+                            this.leader.lead();
                             setLeader(null);
                         } catch (Exception e) {
                             LOG.warn("Unexpected exception", e);

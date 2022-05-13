@@ -61,8 +61,7 @@ public abstract class LearnerZooKeeperServer extends QuorumZooKeeperServer {
         if (sessionTracker != null) {
             return ((LearnerSessionTracker) sessionTracker).snapshot();
         }
-        Map<Long, Integer> map = Collections.emptyMap();
-        return map;
+        return Collections.emptyMap();
     }
 
     /**
