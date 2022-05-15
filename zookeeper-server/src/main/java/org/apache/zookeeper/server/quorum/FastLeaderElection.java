@@ -588,11 +588,23 @@ public class FastLeaderElection implements Election {
     Messenger messenger;
 
     /**
-     *
+     * 选举轮次
      */
     AtomicLong logicalclock = new AtomicLong(); /* Election instance */
+
+    /**
+     * 意向leader的serverId
+     */
     long proposedLeader;
+
+    /**
+     * 意向leader日志ID
+     */
     long proposedZxid;
+
+    /**
+     * 意向leader任期
+     */
     long proposedEpoch;
 
     /**
@@ -1048,14 +1060,14 @@ public class FastLeaderElection implements Election {
                                 break;
                             }
 
-                            //region 比较更新选举轮次与意向选票
+                            //region 进行选票PK【新选票PK成功需要跟新本节点意向选票并重新广播给各节点】
                             /*
                              * 1、发送节点选举轮次大于当前节点:
                              * 跟新本节点选举轮次、比较并更新本节点意向选票、向其他节点广播本节点选票
                              * 2、发送节点选举轮次小于当前节点:
                              * 忽略该选票、
                              * 3、发送节点选举轮次等于当前节点:
-                             * 比较并更新本节点意向选票、向其他节点广播本节点选票
+                             * 比较并更新本节点意向选票、向其他节点广播意向选票
                              */
                             // If notification > current, replace and send messages out
                             if (n.electionEpoch > logicalclock.get()) {
