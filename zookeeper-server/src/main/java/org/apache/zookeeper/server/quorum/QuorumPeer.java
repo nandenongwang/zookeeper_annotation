@@ -1147,7 +1147,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         //1、TODO
         loadDataBase();
 
-        //2、TODO
+        //2、启动客户端连接server
         startServerCnxnFactory();
 
         //3、启动8080端口的Http命令接口管理服务
@@ -1163,7 +1163,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         //5、开启jvm停顿检测线程
         startJvmPauseMonitor();
 
-        //6、启动peer线程 TODO
+        //6、启动peer线程 【开启选举、维护角色】
         super.start();
     }
 

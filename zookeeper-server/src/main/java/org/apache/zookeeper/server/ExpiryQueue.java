@@ -1,22 +1,6 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server;
+
+import org.apache.zookeeper.common.Time;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -25,24 +9,31 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import org.apache.zookeeper.common.Time;
 
 /**
+ * 超时检测队列
  * ExpiryQueue tracks elements in time sorted fixed duration buckets.
  * It's used by SessionTrackerImpl to expire sessions and NIOServerCnxnFactory
  * to expire connections.
  */
 public class ExpiryQueue<E> {
 
-    private final ConcurrentHashMap<E, Long> elemMap = new ConcurrentHashMap<E, Long>();
+    private final ConcurrentHashMap<E/* 检测对象 */, Long/* 下次超时时间 */> elemMap = new ConcurrentHashMap<>();
     /**
      * The maximum number of buckets is equal to max timeout/expirationInterval,
      * so the expirationInterval should not be too small compared to the
      * max timeout that this expiry queue needs to maintain.
      */
-    private final ConcurrentHashMap<Long, Set<E>> expiryMap = new ConcurrentHashMap<Long, Set<E>>();
+    private final ConcurrentHashMap<Long/* 下次超时时间 */, Set<E>/* 检测对象 */> expiryMap = new ConcurrentHashMap<>();
 
+    /**
+     * 下次间隔到期时间
+     */
     private final AtomicLong nextExpirationTime = new AtomicLong();
+
+    /**
+     * 过期间隔时间
+     */
     private final int expirationInterval;
 
     public ExpiryQueue(int expirationInterval) {
@@ -50,15 +41,20 @@ public class ExpiryQueue<E> {
         nextExpirationTime.set(roundToNextInterval(Time.currentElapsedTime()));
     }
 
+    /**
+     * 制定时间最近下轮间隔时间 【(10/3+1)=12】
+     */
     private long roundToNextInterval(long time) {
         return (time / expirationInterval + 1) * expirationInterval;
     }
 
     /**
+     * 移除元素
      * Removes element from the queue.
-     * @param elem  element to remove
+     *
+     * @param elem element to remove
      * @return time at which the element was set to expire, or null if
-     *              it wasn't present
+     * it wasn't present
      */
     public Long remove(E elem) {
         Long expiryTime = elemMap.remove(elem);
@@ -74,12 +70,14 @@ public class ExpiryQueue<E> {
     }
 
     /**
+     * 增加或更新检测对象超时时间
      * Adds or updates expiration time for element in queue, rounding the
      * timeout to the expiry interval bucketed used by this queue.
-     * @param elem     element to add/update
-     * @param timeout  timout in milliseconds
+     *
+     * @param elem    element to add/update
+     * @param timeout timout in milliseconds
      * @return time at which the element is now set to expire if
-     *                 changed, or null if unchanged
+     * changed, or null if unchanged
      */
     public Long update(E elem, int timeout) {
         Long prevExpiryTime = elemMap.get(elem);
@@ -118,6 +116,8 @@ public class ExpiryQueue<E> {
     }
 
     /**
+     * 还需等待多久下次检查对象过期
+     *
      * @return milliseconds until next expiration time, or 0 if has already past
      */
     public long getWaitTime() {
@@ -127,12 +127,13 @@ public class ExpiryQueue<E> {
     }
 
     /**
+     * 获取过期对象并更新下次超时时间
      * Remove the next expired set of elements from expireMap. This method needs
      * to be called frequently enough by checking getWaitTime(), otherwise there
      * will be a backlog of empty sets queued up in expiryMap.
      *
      * @return next set of expired elements, or an empty set if none are
-     *         ready
+     * ready
      */
     public Set<E> poll() {
         long now = Time.currentElapsedTime();
@@ -158,7 +159,7 @@ public class ExpiryQueue<E> {
         pwriter.print(")/(");
         pwriter.print(elemMap.size());
         pwriter.println("):");
-        ArrayList<Long> keys = new ArrayList<Long>(expiryMap.keySet());
+        ArrayList<Long> keys = new ArrayList<>(expiryMap.keySet());
         Collections.sort(keys);
         for (long time : keys) {
             Set<E> set = expiryMap.get(time);

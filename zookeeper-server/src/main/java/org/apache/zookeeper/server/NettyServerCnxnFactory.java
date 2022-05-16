@@ -632,16 +632,19 @@ public class NettyServerCnxnFactory extends ServerCnxnFactory {
     }
 
     /** {@inheritDoc} */
+    @Override
     public int getMaxClientCnxnsPerHost() {
         return maxClientCnxns;
     }
 
     /** {@inheritDoc} */
+    @Override
     public void setMaxClientCnxnsPerHost(int max) {
         maxClientCnxns = max;
     }
 
     /** {@inheritDoc} */
+    @Override
     public int getSocketListenBacklog() {
         return listenBacklog;
     }
@@ -725,6 +728,7 @@ public class NettyServerCnxnFactory extends ServerCnxnFactory {
         LOG.info("bound to port {}", getLocalPort());
     }
 
+    @Override
     public void reconfigure(InetSocketAddress addr) {
         LOG.info("binding to port {}, {}", addr, localAddress);
         if (addr != null && localAddress != null) {

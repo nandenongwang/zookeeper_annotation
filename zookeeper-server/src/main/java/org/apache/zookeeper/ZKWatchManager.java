@@ -317,15 +317,17 @@ class ZKWatchManager implements ClientWatchManager {
         return success;
     }
 
-    /* (non-Javadoc)
-     * @see org.apache.zookeeper.ClientWatchManager#materialize(Event.KeeperState,
-     *                                                        Event.EventType, java.lang.String)
+    /**
+     * 获取并移除指定路径指定类型的监听器
+     * (non-Javadoc)
+     * {@see org.apache.zookeeper.ClientWatchManager#materialize(Event.KeeperState, Event.EventType, java.lang.String)}
      */
     @Override
     public Set<Watcher> materialize(Watcher.Event.KeeperState state, Watcher.Event.EventType type, String clientPath) {
         final Set<Watcher> result = new HashSet<>();
 
         switch (type) {
+            //region None
             case None:
                 if (defaultWatcher != null) {
                     result.add(defaultWatcher);
@@ -372,6 +374,9 @@ class ZKWatchManager implements ClientWatchManager {
                 }
 
                 return result;
+            //endregion
+
+            //region NodeDataChanged、NodeCreated
             case NodeDataChanged:
             case NodeCreated:
                 synchronized (dataWatches) {
@@ -382,12 +387,18 @@ class ZKWatchManager implements ClientWatchManager {
                 }
                 addPersistentWatches(clientPath, result);
                 break;
+            //endregion
+
+            //region NodeChildrenChanged
             case NodeChildrenChanged:
                 synchronized (childWatches) {
                     addTo(childWatches.remove(clientPath), result);
                 }
                 addPersistentWatches(clientPath, result);
                 break;
+            //endregion
+
+            //region NodeDeleted
             case NodeDeleted:
                 synchronized (dataWatches) {
                     addTo(dataWatches.remove(clientPath), result);
@@ -405,6 +416,8 @@ class ZKWatchManager implements ClientWatchManager {
                 }
                 addPersistentWatches(clientPath, result);
                 break;
+            //endregion
+
             default:
                 String errorMsg = String.format(
                         "Unhandled watch event type %s with state %s on path %s",

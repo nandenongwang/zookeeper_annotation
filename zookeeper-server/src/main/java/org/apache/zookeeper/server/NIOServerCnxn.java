@@ -1,21 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server;
 
 import org.apache.jute.BinaryInputArchive;
@@ -53,6 +35,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
+ * 客户端连接
  * This class handles communication with clients using NIO. There is one per
  * client, but only one thread doing the communication.
  */
@@ -70,15 +53,25 @@ public class NIOServerCnxn extends ServerCnxn {
 
     private boolean initialized;
 
+    /**
+     * 读取消息长度buffer
+     */
     private final ByteBuffer lenBuffer = ByteBuffer.allocate(4);
 
+    /**
+     * 读取消息长度和内容buffer
+     */
     protected ByteBuffer incomingBuffer = lenBuffer;
 
-    private final Queue<ByteBuffer> outgoingBuffers = new LinkedBlockingQueue<ByteBuffer>();
+    /**
+     * 写出缓冲
+     */
+    private final Queue<ByteBuffer> outgoingBuffers = new LinkedBlockingQueue<>();
 
     private int sessionTimeout;
 
     /**
+     * 客户端sessionId
      * This is the id that uniquely identifies the session of a client. Once
      * this session is no longer active, the ephemeral nodes will go away.
      */
@@ -107,14 +100,18 @@ public class NIOServerCnxn extends ServerCnxn {
         this.sessionTimeout = factory.sessionlessCnxnTimeout;
     }
 
-    /* Send close connection packet to the client, doIO will eventually
+    /**
+     * 关闭session 【发送关闭包】
+     * Send close connection packet to the client, doIO will eventually
      * close the underlying machinery (like socket, selectorkey, etc...)
      */
+    @Override
     public void sendCloseSession() {
         sendBuffer(ServerCnxnFactory.closeConn);
     }
 
     /**
+     * 同步发送消息 【通过socket写出】
      * send buffer without using the asynchronous
      * calls to selector and then close the socket
      *
@@ -139,9 +136,11 @@ public class NIOServerCnxn extends ServerCnxn {
     }
 
     /**
+     * 异步发送消息 【写入写出缓冲中】
      * sendBuffer pushes a byte buffer onto the outgoing buffer queue for
      * asynchronous writes.
      */
+    @Override
     public void sendBuffer(ByteBuffer... buffers) {
         if (LOG.isTraceEnabled()) {
             LOG.trace("Add a buffer to outgoingBuffers, sk {} is valid: {}", sk, sk.isValid());
@@ -157,6 +156,7 @@ public class NIOServerCnxn extends ServerCnxn {
     }
 
     /**
+     * 处理读取失败
      * When read on socket failed, this is typically because client closed the
      * connection. In most cases, the client does this when the server doesn't
      * respond within 2/3 of session timeout. This possibly indicates server
@@ -175,7 +175,7 @@ public class NIOServerCnxn extends ServerCnxn {
     }
 
     /**
-     * 读取消息体
+     * 读取消息体到传入buffer中
      * Read the request payload (everything following the length prefix)
      */
     private void readPayload() throws IOException, InterruptedException, ClientCnxnLimitException {
@@ -327,7 +327,7 @@ public class NIOServerCnxn extends ServerCnxn {
     }
 
     /**
-     * 处理客户端IO事件
+     * 处理客户端IO事件 【读取消息内容到传入buffer中、写出写缓冲消息到socket】
      * Handles read/write IO on connection.
      */
     void doIO(SelectionKey k) throws InterruptedException {
@@ -415,6 +415,7 @@ public class NIOServerCnxn extends ServerCnxn {
     // register an interest op update request with the selector.
     //
     // Don't support wait disable receive in NIO, ignore the parameter
+    @Override
     public void disableRecv(boolean waitDisableRecv) {
         if (throttled.compareAndSet(false, true)) {
             requestInterestOpsUpdate();
@@ -424,6 +425,7 @@ public class NIOServerCnxn extends ServerCnxn {
     // Disable throttling and resume acceptance of new requests. If this
     // entailed a state change, register an interest op update request with
     // the selector.
+    @Override
     public void enableRecv() {
         if (throttled.compareAndSet(true, false)) {
             requestInterestOpsUpdate();
@@ -439,6 +441,7 @@ public class NIOServerCnxn extends ServerCnxn {
     }
 
     /**
+     * 分批【2048字符】写出命令响应
      * This class wraps the sendBuffer method of NIOServerCnxn. It is
      * responsible for chunking up the response to a client. Rather
      * than cons'ing up a response fully in memory, which may be large
@@ -585,6 +588,7 @@ public class NIOServerCnxn extends ServerCnxn {
      *
      * @see org.apache.zookeeper.server.ServerCnxnIface#getSessionTimeout()
      */
+    @Override
     public int getSessionTimeout() {
         return sessionTimeout;
     }
@@ -689,6 +693,9 @@ public class NIOServerCnxn extends ServerCnxn {
 
     private static final ByteBuffer packetSentinel = ByteBuffer.allocate(0);
 
+    /**
+     * 发送响应
+     */
     @Override
     public int sendResponse(ReplyHeader h, Record r, String tag, String cacheKey, Stat stat, int opCode) {
         int responseSize = 0;

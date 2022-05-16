@@ -237,7 +237,7 @@ public class ZooKeeper implements AutoCloseable {
                 synchronized (watches) {
                     Set<Watcher> watchers = watches.get(clientPath);
                     if (watchers == null) {
-                        watchers = new HashSet<Watcher>();
+                        watchers = new HashSet<>();
                         watches.put(clientPath, watchers);
                     }
                     watchers.add(watcher);
@@ -1155,6 +1155,7 @@ public class ZooKeeper implements AutoCloseable {
      *
      * @throws InterruptedException
      */
+    @Override
     public synchronized void close() throws InterruptedException {
         if (!cnxn.getState().isAlive()) {
             LOG.debug("Close called on already closed client");
@@ -1260,12 +1261,15 @@ public class ZooKeeper implements AutoCloseable {
      */
     public String create(final String path, byte[] data, List<ACL> acl, CreateMode createMode) throws KeeperException, InterruptedException {
         final String clientPath = path;
+        //校验
         PathUtils.validatePath(clientPath, createMode.isSequential());
         EphemeralType.validateTTL(createMode, -1);
         validateACL(acl);
 
+        //拼接rootPath
         final String serverPath = prependChroot(clientPath);
 
+        //创建请求、响应
         RequestHeader h = new RequestHeader();
         h.setType(createMode.isContainer() ? ZooDefs.OpCode.createContainer : ZooDefs.OpCode.create);
         CreateRequest request = new CreateRequest();
@@ -1274,6 +1278,8 @@ public class ZooKeeper implements AutoCloseable {
         request.setFlags(createMode.toFlag());
         request.setPath(serverPath);
         request.setAcl(acl);
+
+        //发送请求
         ReplyHeader r = cnxn.submitRequest(h, request, response, null);
         if (r.getErr() != 0) {
             throw KeeperException.create(KeeperException.Code.get(r.getErr()), clientPath);

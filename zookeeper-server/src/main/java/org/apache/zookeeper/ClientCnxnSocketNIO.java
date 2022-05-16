@@ -41,8 +41,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
     }
 
     /**
-     * @throws InterruptedException
-     * @throws IOException
+     * 处理读写事件【读取完整响应交由发送线程解析处理、写出所有缓冲请求】
      */
     void doIO(Queue<Packet> pendingQueue, ClientCnxn cnxn) throws InterruptedException, IOException {
         SocketChannel sock = (SocketChannel) sockKey.channel();
@@ -215,7 +214,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
     }
 
     /**
-     * 创建客户端socket channel
+     * 创建服务端连接socket channel
      * create a socket channel
      */
     SocketChannel createSock() throws IOException {
@@ -303,6 +302,9 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         selector.wakeup();
     }
 
+    /**
+     * 处理服务端响应读写事件
+     */
     @Override
     void doTransport(int waitTimeOut, Queue<Packet> pendingQueue, ClientCnxn cnxn) throws IOException, InterruptedException {
         selector.select(waitTimeOut);
@@ -316,15 +318,22 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         updateNow();
         for (SelectionKey k : selected) {
             SocketChannel sc = ((SocketChannel) k.channel());
+
+            //region 首次连接上、发送注册信息
             if ((k.readyOps() & SelectionKey.OP_CONNECT) != 0) {
                 if (sc.finishConnect()) {
                     updateLastSendAndHeard();
                     updateSocketAddresses();
                     sendThread.primeConnection();
                 }
-            } else if ((k.readyOps() & (SelectionKey.OP_READ | SelectionKey.OP_WRITE)) != 0) {
+            }
+            //endregion
+
+            //region 收到新消息或socket可写时进行IO处理
+            else if ((k.readyOps() & (SelectionKey.OP_READ | SelectionKey.OP_WRITE)) != 0) {
                 doIO(pendingQueue, cnxn);
             }
+            //endregion
         }
         if (sendThread.getZkState().isConnected()) {
             if (findSendablePacket(outgoingQueue, sendThread.tunnelAuthInProgress()) != null) {
@@ -382,7 +391,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
     }
 
     /**
-     * 关注读写事件
+     * 变更selector关注读写事件
      */
     @Override
     void connectionPrimed() {

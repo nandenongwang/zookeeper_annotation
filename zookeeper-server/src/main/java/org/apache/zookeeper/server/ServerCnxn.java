@@ -18,23 +18,6 @@
 
 package org.apache.zookeeper.server;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
-import java.security.cert.Certificate;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 import org.apache.jute.BinaryOutputArchive;
 import org.apache.jute.Record;
 import org.apache.zookeeper.Quotas;
@@ -48,6 +31,18 @@ import org.apache.zookeeper.proto.ReplyHeader;
 import org.apache.zookeeper.proto.RequestHeader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.security.cert.Certificate;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Interface to a Server connection - represents a connection from a client
@@ -71,7 +66,8 @@ public abstract class ServerCnxn implements Stats, Watcher {
 
     AtomicLong outstandingCount = new AtomicLong();
 
-    /** The ZooKeeperServer for this connection. May be null if the server
+    /**
+     * The ZooKeeperServer for this connection. May be null if the server
      * is not currently serving requests (for example if the server is not
      * an active quorum participant.
      */
@@ -164,29 +160,29 @@ public abstract class ServerCnxn implements Stats, Watcher {
 
     /**
      * Serializes a ZooKeeper response and enqueues it for sending.
-     *
+     * <p>
      * Serializes client response parts and enqueues them into outgoing queue.
-     *
+     * <p>
      * If both cache key and last modified zxid are provided, the serialized
      * response is caсhed under the provided key, the last modified zxid is
      * stored along with the value. A cache entry is invalidated if the
      * provided last modified zxid is more recent than the stored one.
-     *
+     * <p>
      * Attention: this function is not thread safe, due to caching not being
      * thread safe.
      *
-     * @param h reply header
-     * @param r reply payload, can be null
-     * @param tag Jute serialization tag, can be null
+     * @param h        reply header
+     * @param r        reply payload, can be null
+     * @param tag      Jute serialization tag, can be null
      * @param cacheKey Key for caching the serialized payload. A null value prevents caching.
-     * @param stat Stat information for the the reply payload, used for cache invalidation.
-     *             A value of 0 prevents caching.
-     * @param opCode The op code appertains to the corresponding request of the response,
-     *               used to decide which cache (e.g. read response cache,
-     *               list of children response cache, ...) object to look up to when applicable.
+     * @param stat     Stat information for the the reply payload, used for cache invalidation.
+     *                 A value of 0 prevents caching.
+     * @param opCode   The op code appertains to the corresponding request of the response,
+     *                 used to decide which cache (e.g. read response cache,
+     *                 list of children response cache, ...) object to look up to when applicable.
      */
     public abstract int sendResponse(ReplyHeader h, Record r, String tag,
-                                      String cacheKey, Stat stat, int opCode) throws IOException;
+                                     String cacheKey, Stat stat, int opCode) throws IOException;
 
     public int sendResponse(ReplyHeader h, Record r, String tag) throws IOException {
         return sendResponse(h, r, tag, null, null, -1);
@@ -199,6 +195,9 @@ public abstract class ServerCnxn implements Stats, Watcher {
         return baos.toByteArray();
     }
 
+    /**
+     * 序列化响应
+     */
     protected ByteBuffer[] serialize(ReplyHeader h, Record r, String tag,
                                      String cacheKey, Stat stat, int opCode) throws IOException {
         byte[] header = serializeRecord(h);
@@ -207,13 +206,13 @@ public abstract class ServerCnxn implements Stats, Watcher {
             ResponseCache cache = null;
             Counter cacheHit = null, cacheMiss = null;
             switch (opCode) {
-                case OpCode.getData : {
+                case OpCode.getData: {
                     cache = zkServer.getReadResponseCache();
                     cacheHit = ServerMetrics.getMetrics().RESPONSE_PACKET_CACHE_HITS;
                     cacheMiss = ServerMetrics.getMetrics().RESPONSE_PACKET_CACHE_MISSING;
                     break;
                 }
-                case OpCode.getChildren2 : {
+                case OpCode.getChildren2: {
                     cache = zkServer.getGetChildrenResponseCache();
                     cacheHit = ServerMetrics.getMetrics().RESPONSE_PACKET_GET_CHILDREN_CACHE_HITS;
                     cacheMiss = ServerMetrics.getMetrics().RESPONSE_PACKET_GET_CHILDREN_CACHE_MISSING;
@@ -270,7 +269,9 @@ public abstract class ServerCnxn implements Stats, Watcher {
 
     abstract void setSessionId(long sessionId);
 
-    /** auth info for the cnxn, returns an unmodifyable list */
+    /**
+     * auth info for the cnxn, returns an unmodifyable list
+     */
     public List<Id> getAuthInfo() {
         return Collections.unmodifiableList(new ArrayList<>(authInfo));
     }
@@ -306,6 +307,7 @@ public abstract class ServerCnxn implements Stats, Watcher {
             super(msg);
             this.reason = reason;
         }
+
         public DisconnectReason getReason() {
             return reason;
         }
@@ -325,6 +327,7 @@ public abstract class ServerCnxn implements Stats, Watcher {
         public String toString() {
             return "EndOfStreamException: " + getMessage();
         }
+
         public DisconnectReason getReason() {
             return reason;
         }
@@ -497,13 +500,18 @@ public abstract class ServerCnxn implements Stats, Watcher {
     }
 
     public abstract InetSocketAddress getRemoteSocketAddress();
+
     public abstract int getInterestOps();
+
     public abstract boolean isSecure();
+
     public abstract Certificate[] getClientCertificateChain();
+
     public abstract void setClientCertificateChain(Certificate[] chain);
 
     /**
      * Print information about the connection.
+     *
      * @param brief iff true prints brief details, otw full detail
      */
     public synchronized void dumpConnectionInfo(PrintWriter pwriter, boolean brief) {
@@ -579,8 +587,7 @@ public abstract class ServerCnxn implements Stats, Watcher {
      * clean up the socket related to a command and also make sure we flush the
      * data before we do that
      *
-     * @param pwriter
-     *            the pwriter for a command socket
+     * @param pwriter the pwriter for a command socket
      */
     public void cleanupWriterSocket(PrintWriter pwriter) {
         try {

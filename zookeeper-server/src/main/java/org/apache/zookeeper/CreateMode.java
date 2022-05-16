@@ -47,6 +47,7 @@ public enum CreateMode {
      */
     EPHEMERAL_SEQUENTIAL(3, true, true, false, false),
     /**
+     * 容器节点 【子节点为0时会自动删除其他与持久节点相同】
      * The znode will be a container node. Container
      * nodes are special purpose nodes useful for recipes such as leader, lock,
      * etc. When the last child of a container is deleted, the container becomes
@@ -111,31 +112,31 @@ public enum CreateMode {
      */
     public static CreateMode fromFlag(int flag) throws KeeperException {
         switch (flag) {
-        case 0:
-            return CreateMode.PERSISTENT;
+            case 0:
+                return CreateMode.PERSISTENT;
 
-        case 1:
-            return CreateMode.EPHEMERAL;
+            case 1:
+                return CreateMode.EPHEMERAL;
 
-        case 2:
-            return CreateMode.PERSISTENT_SEQUENTIAL;
+            case 2:
+                return CreateMode.PERSISTENT_SEQUENTIAL;
 
-        case 3:
-            return CreateMode.EPHEMERAL_SEQUENTIAL;
+            case 3:
+                return CreateMode.EPHEMERAL_SEQUENTIAL;
 
-        case 4:
-            return CreateMode.CONTAINER;
+            case 4:
+                return CreateMode.CONTAINER;
 
-        case 5:
-            return CreateMode.PERSISTENT_WITH_TTL;
+            case 5:
+                return CreateMode.PERSISTENT_WITH_TTL;
 
-        case 6:
-            return CreateMode.PERSISTENT_SEQUENTIAL_WITH_TTL;
+            case 6:
+                return CreateMode.PERSISTENT_SEQUENTIAL_WITH_TTL;
 
-        default:
-            String errMsg = "Received an invalid flag value: " + flag + " to convert to a CreateMode";
-            LOG.error(errMsg);
-            throw new KeeperException.BadArgumentsException(errMsg);
+            default:
+                String errMsg = "Received an invalid flag value: " + flag + " to convert to a CreateMode";
+                LOG.error(errMsg);
+                throw new KeeperException.BadArgumentsException(errMsg);
         }
     }
 
@@ -144,29 +145,29 @@ public enum CreateMode {
      */
     public static CreateMode fromFlag(int flag, CreateMode defaultMode) {
         switch (flag) {
-        case 0:
-            return CreateMode.PERSISTENT;
+            case 0:
+                return CreateMode.PERSISTENT;
 
-        case 1:
-            return CreateMode.EPHEMERAL;
+            case 1:
+                return CreateMode.EPHEMERAL;
 
-        case 2:
-            return CreateMode.PERSISTENT_SEQUENTIAL;
+            case 2:
+                return CreateMode.PERSISTENT_SEQUENTIAL;
 
-        case 3:
-            return CreateMode.EPHEMERAL_SEQUENTIAL;
+            case 3:
+                return CreateMode.EPHEMERAL_SEQUENTIAL;
 
-        case 4:
-            return CreateMode.CONTAINER;
+            case 4:
+                return CreateMode.CONTAINER;
 
-        case 5:
-            return CreateMode.PERSISTENT_WITH_TTL;
+            case 5:
+                return CreateMode.PERSISTENT_WITH_TTL;
 
-        case 6:
-            return CreateMode.PERSISTENT_SEQUENTIAL_WITH_TTL;
+            case 6:
+                return CreateMode.PERSISTENT_SEQUENTIAL_WITH_TTL;
 
-        default:
-            return defaultMode;
+            default:
+                return defaultMode;
         }
     }
 }

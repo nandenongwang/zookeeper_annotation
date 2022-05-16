@@ -41,7 +41,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * This class manages SASL authentication for the client. It
+ * This class manages SASL 【Simple Authentication and Security Layer】 authentication for the client. It
  * allows ClientCnxn to authenticate using SASL with a ZooKeeper server.
  */
 public class ZooKeeperSaslClient {
@@ -210,6 +210,7 @@ public class ZooKeeperSaslClient {
 
     public static class ServerSaslResponseCallback implements AsyncCallback.DataCallback {
 
+        @Override
         public void processResult(int rc, String path, Object ctx, byte[] data, Stat stat) {
             // processResult() is used by ClientCnxn's sendThread to respond to
             // data[] contains the Zookeeper Server's SASL token.

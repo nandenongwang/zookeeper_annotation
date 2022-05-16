@@ -90,6 +90,7 @@ public class ClientCnxn {
     private final CopyOnWriteArraySet<AuthData> authInfo = new CopyOnWriteArraySet<>();
 
     /**
+     * 挂起future包
      * These are the packets that have been sent and are waiting for a response.
      */
     private final Queue<Packet> pendingQueue = new ArrayDeque<>();
@@ -127,10 +128,19 @@ public class ClientCnxn {
      */
     private boolean readOnly;
 
+    /**
+     * 根路基
+     */
     final String chrootPath;
 
+    /**
+     * 通信线程
+     */
     final SendThread sendThread;
 
+    /**
+     * 事件处理线程
+     */
     final EventThread eventThread;
 
     /**
@@ -205,31 +215,56 @@ public class ClientCnxn {
     }
 
     /**
+     * 请求future对象
      * This class allows us to pass the headers and the relevant records around.
      */
     static class Packet {
 
+        /**
+         * 请求头
+         */
         RequestHeader requestHeader;
 
+        /**
+         * 响应头
+         */
         ReplyHeader replyHeader;
 
+        /**
+         * 请求体
+         */
         Record request;
 
+        /**
+         * 响应体
+         */
         Record response;
 
+        /**
+         * 序列化内容
+         */
         ByteBuffer bb;
 
         /**
+         * 客户端路径 【without rootPath】
          * Client's view of the path (may differ due to chroot)
          **/
         String clientPath;
+
         /**
+         * 服务端路径 【with rootPath】
          * Servers's view of the path (may differ due to chroot)
          **/
         String serverPath;
 
+        /**
+         * 请求是否完成
+         */
         boolean finished;
 
+        /**
+         * 请求完成回调
+         */
         AsyncCallback cb;
 
         Object ctx;
@@ -392,6 +427,9 @@ public class ClientCnxn {
         initRequestTimeout();
     }
 
+    /**
+     * 启动通信线程、事件处理线程
+     */
     public void start() {
         sendThread.start();
         eventThread.start();
@@ -412,6 +450,7 @@ public class ClientCnxn {
     }
 
     /**
+     * 格式化线程名
      * Guard against creating "-EventThread-EventThread-EventThread-..." thread
      * names when ZooKeeper object is being created from within a watcher.
      * See ZOOKEEPER-795 for details.
@@ -422,6 +461,7 @@ public class ClientCnxn {
     }
 
     /**
+     * 当前线程是否是事件处理线程
      * Tests that current thread is the main event loop.
      * This method is useful only for tests inside ZooKeeper project
      * it is not a public API intended for use by external applications.
@@ -432,9 +472,15 @@ public class ClientCnxn {
         return Thread.currentThread() instanceof EventThread;
     }
 
+    /**
+     * 事件处理线程
+     */
     class EventThread extends ZooKeeperThread {
 
-        private final LinkedBlockingQueue<Object> waitingEvents = new LinkedBlockingQueue<Object>();
+        /**
+         * 待处理【事件-监听器】任务
+         */
+        private final LinkedBlockingQueue<Object> waitingEvents = new LinkedBlockingQueue<>();
 
         /**
          * This is really the queued session state until the event
@@ -455,6 +501,9 @@ public class ClientCnxn {
             queueEvent(event, null);
         }
 
+        /**
+         * 处理事件【封装指定事件与其监听器、入队等待处理】
+         */
         private void queueEvent(WatchedEvent event, Set<Watcher> materializedWatchers) {
             if (event.getType() == EventType.None && sessionState == event.getState()) {
                 return;
@@ -495,6 +544,9 @@ public class ClientCnxn {
             waitingEvents.add(eventOfDeath);
         }
 
+        /**
+         * 持续获取事件任务进行处理
+         */
         @Override
         @SuppressFBWarnings("JLM_JSR166_UTILCONCURRENT_MONITORENTER")
         public void run() {
@@ -523,6 +575,9 @@ public class ClientCnxn {
             LOG.info("EventThread shut down for session: 0x{}", Long.toHexString(getSessionId()));
         }
 
+        /**
+         * 处理事件监听
+         */
         private void processEvent(Object event) {
             try {
                 if (event instanceof WatcherSetEventPair) {
@@ -825,7 +880,9 @@ public class ClientCnxn {
         private boolean isFirstConnect = true;
         private volatile ZooKeeperSaslClient zooKeeperSaslClient;
 
-
+        /**
+         * 解析处理服务端响应
+         */
         void readResponse(ByteBuffer incomingBuffer) throws IOException {
             ByteBufferInputStream bbis = new ByteBufferInputStream(incomingBuffer);
             BinaryInputArchive bbia = BinaryInputArchive.getArchive(bbis);
@@ -833,11 +890,15 @@ public class ClientCnxn {
 
             replyHdr.deserialize(bbia, "header");
             switch (replyHdr.getXid()) {
+                //region ping响应
                 case PING_XID:
                     LOG.debug("Got ping response for session id: 0x{} after {}ms.",
                             Long.toHexString(sessionId),
                             ((System.nanoTime() - lastPingSentNs) / 1000000));
                     return;
+                //endregion
+
+                //region 认证失败 【发送认证失败事件、关闭事件】
                 case AUTHPACKET_XID:
                     LOG.debug("Got auth session id: 0x{}", Long.toHexString(sessionId));
                     if (replyHdr.getErr() == KeeperException.Code.AUTHFAILED.intValue()) {
@@ -847,9 +908,11 @@ public class ClientCnxn {
                         eventThread.queueEventOfDeath();
                     }
                     return;
+                //endregion
+
+                //region 事件通知 【入队事件、等待处理】
                 case NOTIFICATION_XID:
-                    LOG.debug("Got notification session id: 0x{}",
-                            Long.toHexString(sessionId));
+                    LOG.debug("Got notification session id: 0x{}", Long.toHexString(sessionId));
                     WatcherEvent event = new WatcherEvent();
                     event.deserialize(bbia, "response");
 
@@ -870,6 +933,7 @@ public class ClientCnxn {
                     LOG.debug("Got {} for session id 0x{}", we, Long.toHexString(sessionId));
                     eventThread.queueEvent(we);
                     return;
+                //endregion
                 default:
                     break;
             }
@@ -883,7 +947,7 @@ public class ClientCnxn {
                 zooKeeperSaslClient.respondToServer(request.getToken(), ClientCnxn.this);
                 return;
             }
-
+            //region 移除挂起future 【服务端单线程顺序处理请求、故响应应对应队首请求、无需使用xid匹配】
             Packet packet;
             synchronized (pendingQueue) {
                 if (pendingQueue.size() == 0) {
@@ -891,6 +955,9 @@ public class ClientCnxn {
                 }
                 packet = pendingQueue.remove();
             }
+            //endregion
+
+            //region 设置响应结果并完成future
             /*
              * Since requests are processed in order, we better get a response
              * to the first request!
@@ -918,6 +985,7 @@ public class ClientCnxn {
             } finally {
                 finishPacket(packet);
             }
+            //endregion
         }
 
         SendThread(ClientCnxnSocket clientCnxnSocket) throws IOException {
@@ -955,6 +1023,7 @@ public class ClientCnxn {
         }
 
         /**
+         * 发送所有监听路径、认证信息
          * Setup session, previous watches, authentication.
          */
         void primeConnection() throws IOException {
@@ -984,11 +1053,11 @@ public class ClientCnxn {
 
                     while (dataWatchesIter.hasNext() || existWatchesIter.hasNext() || childWatchesIter.hasNext()
                             || persistentWatchesIter.hasNext() || persistentRecursiveWatchesIter.hasNext()) {
-                        List<String> dataWatchesBatch = new ArrayList<String>();
-                        List<String> existWatchesBatch = new ArrayList<String>();
-                        List<String> childWatchesBatch = new ArrayList<String>();
-                        List<String> persistentWatchesBatch = new ArrayList<String>();
-                        List<String> persistentRecursiveWatchesBatch = new ArrayList<String>();
+                        List<String> dataWatchesBatch = new ArrayList<>();
+                        List<String> existWatchesBatch = new ArrayList<>();
+                        List<String> childWatchesBatch = new ArrayList<>();
+                        List<String> persistentWatchesBatch = new ArrayList<>();
+                        List<String> persistentRecursiveWatchesBatch = new ArrayList<>();
                         int batchLength = 0;
 
                         // Note, we may exceed our max length by a bit when we add the last
@@ -1045,10 +1114,14 @@ public class ClientCnxn {
                                 null));
             }
             outgoingQueue.addFirst(new Packet(null, null, conReq, null, null, readOnly));
+            //初始信息发送完毕、更新为监听读写事件
             clientCnxnSocket.connectionPrimed();
             LOG.debug("Session establishment request sent on {}", clientCnxnSocket.getRemoteSocketAddress());
         }
 
+        /**
+         * 拼接根路径
+         */
         private List<String> prependChroot(List<String> paths) {
             if (chrootPath != null && !paths.isEmpty()) {
                 for (int i = 0; i < paths.size(); ++i) {
@@ -1066,6 +1139,9 @@ public class ClientCnxn {
             return paths;
         }
 
+        /**
+         * 发送心跳包
+         */
         private void sendPing() {
             lastPingSentNs = System.nanoTime();
             RequestHeader h = new RequestHeader(ClientCnxn.PING_XID, OpCode.ping);
@@ -1084,6 +1160,9 @@ public class ClientCnxn {
         // throws a LoginException: see startConnect() below.
         private boolean saslLoginFailed = false;
 
+        /**
+         * 启动与server连接
+         */
         private void startConnect(InetSocketAddress addr) throws IOException {
             // initializing it for new connection
             saslLoginFailed = false;
@@ -1142,6 +1221,7 @@ public class ClientCnxn {
             InetSocketAddress serverAddress = null;
             while (state.isAlive()) {
                 try {
+                    //region 创建连接
                     if (!clientCnxnSocket.isConnected()) {
                         // don't re-establish connection if we are closing
                         if (closing) {
@@ -1159,7 +1239,9 @@ public class ClientCnxn {
                         clientCnxnSocket.updateNow();
                         clientCnxnSocket.updateLastSendAndHeard();
                     }
+                    //endregion
 
+                    //region 发送认证信息、读取超时、连接超时检测
                     if (state.isConnected()) {
                         // determine whether we need to send an AuthFailed event.
                         if (zooKeeperSaslClient != null) {
@@ -1206,6 +1288,9 @@ public class ClientCnxn {
                         LOG.warn(warnInfo);
                         throw new SessionTimeoutException(warnInfo);
                     }
+                    //endregion
+
+                    //region 发送心跳
                     if (state.isConnected()) {
                         //1000(1 second) is to prevent race condition missing to send the second ping
                         //also make sure not to send too many pings when readTimeout is small
@@ -1222,6 +1307,7 @@ public class ClientCnxn {
                             }
                         }
                     }
+                    //endregion
 
                     // If we are in read-only mode, seek for read/write server
                     if (state == States.CONNECTEDREADONLY) {
@@ -1236,6 +1322,7 @@ public class ClientCnxn {
                         to = Math.min(to, pingRwTimeout - idlePingRwServer);
                     }
 
+                    //处理双方通信
                     clientCnxnSocket.doTransport(to, pendingQueue, ClientCnxn.this);
                 } catch (Throwable e) {
                     if (closing) {
@@ -1261,6 +1348,7 @@ public class ClientCnxn {
                 }
             }
 
+            //region 关闭
             synchronized (outgoingQueue) {
                 // When it comes to this point, it guarantees that later queued
                 // packet to outgoingQueue will be notified of death.
@@ -1279,6 +1367,7 @@ public class ClientCnxn {
                     LOG,
                     ZooTrace.getTextTraceLevel(),
                     "SendThread exited loop for session: 0x" + Long.toHexString(getSessionId()));
+            //endregion
         }
 
         private void cleanAndNotifyState() {
@@ -1492,13 +1581,17 @@ public class ClientCnxn {
         }
     }
 
+    /**
+     * 请求ID 【关联请求future用】
+     */
     // @VisibleForTesting
     protected int xid = 1;
 
     // @VisibleForTesting
     volatile States state = States.NOT_CONNECTED;
 
-    /*
+    /**
+     * 递增请求ID
      * getXid() is called externally by ClientCnxnNIO::doIO() when packets are sent from the outgoingQueue to
      * the server. Thus, getXid() must be public.
      */

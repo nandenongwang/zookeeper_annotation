@@ -1,21 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server;
 
 import org.slf4j.Logger;
@@ -96,6 +78,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
     }
 
     /**
+     * 带selector线程
      * AbstractSelectThread is an abstract base class containing a few bits
      * of code shared by the AcceptThread (which selects on the listen socket)
      * and SelectorThread (which selects on client connections) classes.
@@ -153,6 +136,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
     }
 
     /**
+     * 接受客户端连接线程【accept连接并轮训注册到selector线程处理读写事件】
      * There is a single AcceptThread which accepts new connections and assigns
      * them to a SelectorThread using a simple round-robin scheme to spread
      * them across the SelectorThreads. It enforces maximum number of
@@ -176,6 +160,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
             selectorIterator = this.selectorThreads.iterator();
         }
 
+        @Override
         public void run() {
             try {
                 while (!stopped && !acceptSocket.socket().isClosed()) {
@@ -297,7 +282,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
     }
 
     /**
-     * 接收连接IO处理请求线程
+     * 连接读写事件处理线程
      * The SelectorThread receives newly accepted connections from the
      * AcceptThread and is responsible for selecting for I/O readiness
      * across the connections. This thread is the only thread that performs
@@ -366,6 +351,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
          * newly accepted connections and updates any interest ops on the
          * queue.
          */
+        @Override
         public void run() {
             try {
                 while (!stopped) {
@@ -510,6 +496,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
             this.cnxn = (NIOServerCnxn) key.attachment();
         }
 
+        @Override
         public void doWork() throws InterruptedException {
             if (!key.isValid()) {
                 selectorThread.cleanupSelectionKey(key);
@@ -549,6 +536,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
     }
 
     /**
+     * 客户端连接超时检测线程
      * This thread is responsible for closing stale connections so that
      * connections on which no session is established are properly expired.
      */
@@ -558,6 +546,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
             super("ConnnectionExpirer");
         }
 
+        @Override
         public void run() {
             try {
                 while (!stopped) {
@@ -582,6 +571,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
     ServerSocketChannel ss;
 
     /**
+     * 线程本地直接缓冲buffer
      * We use this buffer to do efficient socket I/O. Because I/O is handled
      * by the worker threads (or the selector threads directly, if no worker
      * thread pool is created), we can create a fixed set of these to be
@@ -605,6 +595,10 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
     int listenBacklog = -1;
 
     int sessionlessCnxnTimeout;
+
+    /**
+     * 客户端连接超时检测队列
+     */
     private ExpiryQueue<NIOServerCnxn> cnxnExpiryQueue;
 
     /**
@@ -612,7 +606,11 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
      */
     protected WorkerService workerPool;
 
+    /**
+     * 网络iO读写直接buffer大小
+     */
     private static int directBufferBytes;
+
     private int numSelectorThreads;
     private int numWorkerThreads;
     private long workerShutdownTimeoutMS;
@@ -628,7 +626,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
     private volatile boolean stopped = true;
     private ConnectionExpirerThread expirerThread;
     private AcceptThread acceptThread;
-    private final Set<SelectorThread> selectorThreads = new HashSet<SelectorThread>();
+    private final Set<SelectorThread> selectorThreads = new HashSet<>();
 
     @Override
     public void configure(InetSocketAddress addr, int maxcc, int backlog, boolean secure) throws IOException {
@@ -690,6 +688,9 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
         }
     }
 
+    /**
+     * 更新监听地址
+     */
     @Override
     public void reconfigure(InetSocketAddress addr) {
         ServerSocketChannel oldSS = ss;
@@ -719,6 +720,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
     /**
      * {@inheritDoc}
      */
+    @Override
     public int getMaxClientCnxnsPerHost() {
         return maxClientCnxns;
     }
@@ -726,6 +728,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
     /**
      * {@inheritDoc}
      */
+    @Override
     public void setMaxClientCnxnsPerHost(int max) {
         maxClientCnxns = max;
     }
@@ -733,10 +736,14 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
     /**
      * {@inheritDoc}
      */
+    @Override
     public int getSocketListenBacklog() {
         return listenBacklog;
     }
 
+    /**
+     * 开启accept线程、io线程、业务work线程、超时检测线程
+     */
     @Override
     public void start() {
         stopped = false;
@@ -778,6 +785,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
     }
 
     /**
+     * 移除连接
      * De-registers the connection from the various mappings maintained
      * by the factory.
      */
@@ -806,6 +814,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
     }
 
     /**
+     * 将客户端连接加入到超时检测中
      * Add or update cnxn in our cnxnExpiryQueue
      *
      * @param cnxn
@@ -814,6 +823,9 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
         cnxnExpiryQueue.update(cnxn, cnxn.getSessionTimeout());
     }
 
+    /**
+     * 添加被管理连接 【增加IP计数器、进行超时检测】
+     */
     private void addCnxn(NIOServerCnxn cnxn) throws IOException {
         InetAddress addr = cnxn.getSocketAddress();
         if (addr == null) {
@@ -841,10 +853,16 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
         touchCnxn(cnxn);
     }
 
+    /**
+     * 创建客户端连接
+     */
     protected NIOServerCnxn createConnection(SocketChannel sock, SelectionKey sk, SelectorThread selectorThread) throws IOException {
         return new NIOServerCnxn(zkServer, sock, sk, this, selectorThread);
     }
 
+    /**
+     * 获取客户端地址连接建立连接数量
+     */
     private int getClientCnxnCount(InetAddress cl) {
         Set<NIOServerCnxn> s = ipMap.get(cl);
         if (s == null) {
@@ -852,6 +870,8 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
         }
         return s.size();
     }
+
+    //region 清理资源并关闭
 
     /**
      * clear all the connections in the selector
@@ -905,6 +925,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
         }
     }
 
+    @Override
     public void shutdown() {
         try {
             // close listen socket and signal selector threads to stop
@@ -942,6 +963,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
             workerPool.join(workerShutdownTimeoutMS);
         }
     }
+    //endregion
 
     @Override
     public Iterable<ServerCnxn> getConnections() {
@@ -963,7 +985,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
 
     @Override
     public Iterable<Map<String, Object>> getAllConnectionInfo(boolean brief) {
-        HashSet<Map<String, Object>> info = new HashSet<Map<String, Object>>();
+        HashSet<Map<String, Object>> info = new HashSet<>();
         // No need to synchronize since cnxns is backed by a ConcurrentHashMap
         for (ServerCnxn c : cnxns) {
             info.add(c.getConnectionInfo(brief));
