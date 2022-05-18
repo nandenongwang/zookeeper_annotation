@@ -1,45 +1,25 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server;
 
-import java.util.ArrayList;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.zookeeper.common.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+
 /**
+ * 自定义多线程池线程池
  * WorkerService is a worker thread pool for running tasks and is implemented
  * using one or more ExecutorServices. A WorkerService can support assignable
  * threads, which it does by creating N separate single thread ExecutorServices,
  * or non-assignable threads, which it does by creating a single N-thread
  * ExecutorService.
- *   - NIOServerCnxnFactory uses a non-assignable WorkerService because the
- *     socket IO requests are order independent and allowing the
- *     ExecutorService to handle thread assignment gives optimal performance.
- *   - CommitProcessor uses an assignable WorkerService because requests for
- *     a given session must be processed in order.
+ * - NIOServerCnxnFactory uses a non-assignable WorkerService because the
+ * socket IO requests are order independent and allowing the
+ * ExecutorService to handle thread assignment gives optimal performance.
+ * - CommitProcessor uses an assignable WorkerService because requests for
+ * a given session must be processed in order.
  * ExecutorService provides queue management and thread restarting, so it's
  * useful even with a single thread.
  */
@@ -47,7 +27,7 @@ public class WorkerService {
 
     private static final Logger LOG = LoggerFactory.getLogger(WorkerService.class);
 
-    private final ArrayList<ExecutorService> workers = new ArrayList<ExecutorService>();
+    private final ArrayList<ExecutorService> workers = new ArrayList<>();
 
     private final String threadNamePrefix;
     private int numWorkerThreads;
@@ -56,12 +36,12 @@ public class WorkerService {
     private volatile boolean stopped = true;
 
     /**
-     * @param name                  worker threads are named &lt;name&gt;Thread-##
-     * @param numThreads            number of worker threads (0 - N)
-     *                              If 0, scheduled work is run immediately by
-     *                              the calling thread.
-     * @param useAssignableThreads  whether the worker threads should be
-     *                              individually assignable or not
+     * @param name                 worker threads are named &lt;name&gt;Thread-##
+     * @param numThreads           number of worker threads (0 - N)
+     *                             If 0, scheduled work is run immediately by
+     *                             the calling thread.
+     * @param useAssignableThreads whether the worker threads should be
+     *                             individually assignable or not
      */
     public WorkerService(String name, int numThreads, boolean useAssignableThreads) {
         this.threadNamePrefix = (name == null ? "" : name) + "Thread";
@@ -182,6 +162,7 @@ public class WorkerService {
             namePrefix = name + "-";
         }
 
+        @Override
         public Thread newThread(Runnable r) {
             Thread t = new Thread(group, r, namePrefix + threadNumber.getAndIncrement(), 0);
             if (!t.isDaemon()) {

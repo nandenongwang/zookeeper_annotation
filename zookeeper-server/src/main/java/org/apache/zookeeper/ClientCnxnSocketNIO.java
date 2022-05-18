@@ -84,7 +84,9 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
             Packet p = findSendablePacket(outgoingQueue, sendThread.tunnelAuthInProgress());
 
             if (p != null) {
+                //更新最新发送时间
                 updateLastSend();
+                //设置请求ID并序列化
                 // If we already started writing p, p.bb will already exist
                 if (p.bb == null) {
                     if ((p.requestHeader != null)
@@ -94,14 +96,17 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                     }
                     p.createBB();
                 }
+                //socket写出
                 sock.write(p.bb);
                 if (!p.bb.hasRemaining()) {
+                    //更新发送总数并移除该发送包
                     sentCount.getAndIncrement();
                     outgoingQueue.removeFirstOccurrence(p);
                     if (p.requestHeader != null
                             && p.requestHeader.getType() != OpCode.ping
                             && p.requestHeader.getType() != OpCode.auth) {
                         synchronized (pendingQueue) {
+                            //挂起请求等待响应
                             pendingQueue.add(p);
                         }
                     }
@@ -132,6 +137,9 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         }
     }
 
+    /**
+     * 从发送缓冲中获取一个可发送包 【获取队头包、如启动包还未发送完成需移动到队头】
+     */
     private Packet findSendablePacket(LinkedBlockingDeque<Packet> outgoingQueue, boolean tunneledAuthInProgres) {
         if (outgoingQueue.isEmpty()) {
             return null;

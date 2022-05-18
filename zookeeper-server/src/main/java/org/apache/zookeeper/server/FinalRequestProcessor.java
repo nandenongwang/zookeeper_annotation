@@ -144,6 +144,7 @@ public class FinalRequestProcessor implements RequestProcessor {
         return rc;
     }
 
+    @Override
     public void processRequest(Request request) {
         LOG.debug("Processing request:: {}", request);
 

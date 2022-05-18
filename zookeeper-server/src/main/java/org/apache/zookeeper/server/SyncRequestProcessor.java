@@ -69,7 +69,7 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
     private int randRoll;
     private long randSize;
 
-    private final BlockingQueue<Request> queuedRequests = new LinkedBlockingQueue<Request>();
+    private final BlockingQueue<Request> queuedRequests = new LinkedBlockingQueue<>();
 
     private final Semaphore snapThreadMutex = new Semaphore(1);
 
@@ -188,6 +188,7 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
                             LOG.warn("Too busy to snap, skipping");
                         } else {
                             new ZooKeeperThread("Snapshot Thread") {
+                                @Override
                                 public void run() {
                                     try {
                                         zks.takeSnapshot();
@@ -251,6 +252,7 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
         lastFlushTime = Time.currentElapsedTime();
     }
 
+    @Override
     public void shutdown() {
         LOG.info("Shutting down");
         queuedRequests.add(REQUEST_OF_DEATH);
@@ -270,6 +272,7 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
         }
     }
 
+    @Override
     public void processRequest(final Request request) {
         Objects.requireNonNull(request, "Request cannot be null");
 

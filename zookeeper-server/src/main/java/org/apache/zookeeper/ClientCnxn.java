@@ -580,6 +580,7 @@ public class ClientCnxn {
          */
         private void processEvent(Object event) {
             try {
+                //region
                 if (event instanceof WatcherSetEventPair) {
                     // each watcher will process the event
                     WatcherSetEventPair pair = (WatcherSetEventPair) event;
@@ -590,7 +591,11 @@ public class ClientCnxn {
                             LOG.error("Error while calling watcher.", t);
                         }
                     }
-                } else if (event instanceof LocalCallback) {
+                }
+                //endregion
+
+                //region
+                else if (event instanceof LocalCallback) {
                     LocalCallback lcb = (LocalCallback) event;
                     if (lcb.cb instanceof StatCallback) {
                         ((StatCallback) lcb.cb).processResult(lcb.rc, lcb.path, lcb.ctx, null);
@@ -613,7 +618,11 @@ public class ClientCnxn {
                     } else {
                         ((VoidCallback) lcb.cb).processResult(lcb.rc, lcb.path, lcb.ctx);
                     }
-                } else {
+                }
+                //endregion
+
+                //region
+                else {
                     Packet p = (Packet) event;
                     int rc = 0;
                     String clientPath = p.clientPath;
@@ -736,6 +745,7 @@ public class ClientCnxn {
                         cb.processResult(rc, clientPath, p.ctx);
                     }
                 }
+                //endregion
             } catch (Throwable t) {
                 LOG.error("Unexpected throwable", t);
             }
@@ -947,7 +957,7 @@ public class ClientCnxn {
                 zooKeeperSaslClient.respondToServer(request.getToken(), ClientCnxn.this);
                 return;
             }
-            //region 移除挂起future 【服务端单线程顺序处理请求、故响应应对应队首请求、无需使用xid匹配】
+            //region 移除挂起future
             Packet packet;
             synchronized (pendingQueue) {
                 if (pendingQueue.size() == 0) {

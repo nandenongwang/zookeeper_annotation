@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
- * 客户端连接
+ * 客户端连接 【服务端】
  * This class handles communication with clients using NIO. There is one per
  * client, but only one thread doing the communication.
  */
@@ -393,6 +393,9 @@ public class NIOServerCnxn extends ServerCnxn {
         }
     }
 
+    /**
+     * 处理读取到的请求
+     */
     protected void readRequest() throws IOException {
         zkServer.processPacket(this, incomingBuffer);
     }
@@ -583,10 +586,10 @@ public class NIOServerCnxn extends ServerCnxn {
         return true;
     }
 
-    /*
+    /**
+     * 获取session超时
      * (non-Javadoc)
-     *
-     * @see org.apache.zookeeper.server.ServerCnxnIface#getSessionTimeout()
+     * {@see org.apache.zookeeper.server.ServerCnxnIface#getSessionTimeout()}
      */
     @Override
     public int getSessionTimeout() {
@@ -601,6 +604,8 @@ public class NIOServerCnxn extends ServerCnxn {
     public String toString() {
         return "ip: " + sock.socket().getRemoteSocketAddress() + " sessionId: 0x" + Long.toHexString(sessionId);
     }
+
+    //region 关闭
 
     /**
      * Close the cnxn and remove it from the factory cnxns list.
@@ -690,11 +695,12 @@ public class NIOServerCnxn extends ServerCnxn {
             LOG.debug("ignoring exception during socketchannel close", e);
         }
     }
+    //endregion
 
     private static final ByteBuffer packetSentinel = ByteBuffer.allocate(0);
 
     /**
-     * 发送响应
+     * 发送响应 【序列化并写入写出缓冲中】
      */
     @Override
     public int sendResponse(ReplyHeader h, Record r, String tag, String cacheKey, Stat stat, int opCode) {
@@ -711,10 +717,9 @@ public class NIOServerCnxn extends ServerCnxn {
         return responseSize;
     }
 
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.apache.zookeeper.server.ServerCnxnIface#process(org.apache.zookeeper.proto.WatcherEvent)
+    /**
+     * 将server连接作为服务端watcher、事件触发时回调向客户端推送事件通知
+     * {@see org.apache.zookeeper.server.ServerCnxnIface#process(org.apache.zookeeper.proto.WatcherEvent)}
      */
     @Override
     public void process(WatchedEvent event) {
@@ -736,22 +741,27 @@ public class NIOServerCnxn extends ServerCnxn {
         ServerMetrics.getMetrics().WATCH_BYTES.add(responseSize);
     }
 
-    /*
-     * (non-Javadoc)
-     *
-     * @see org.apache.zookeeper.server.ServerCnxnIface#getSessionId()
+    /**
+     * 获取该连接对应sessionId
+     * {@see org.apache.zookeeper.server.ServerCnxnIface#getSessionId()}
      */
     @Override
     public long getSessionId() {
         return sessionId;
     }
 
+    /**
+     * 设置该连接sessionId
+     */
     @Override
     public void setSessionId(long sessionId) {
         this.sessionId = sessionId;
         factory.addSession(sessionId, this);
     }
 
+    /**
+     * 设置该连接超时时间、并放入超时检查队列中
+     */
     @Override
     public void setSessionTimeout(int sessionTimeout) {
         this.sessionTimeout = sessionTimeout;
