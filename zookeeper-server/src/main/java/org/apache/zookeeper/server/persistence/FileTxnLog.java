@@ -1,5 +1,6 @@
 package org.apache.zookeeper.server.persistence;
 
+import org.apache.jute.Record;
 import org.apache.jute.*;
 import org.apache.zookeeper.server.Request;
 import org.apache.zookeeper.server.ServerMetrics;
@@ -23,6 +24,7 @@ import java.util.zip.Adler32;
 import java.util.zip.Checksum;
 
 /**
+ * 日志存储
  * This class implements the TxnLog interface. It provides api's
  * to access the txnlogs and add entries to it.
  * <p>
@@ -83,6 +85,7 @@ public class FileTxnLog implements TxnLog, Closeable {
     private static final long fsyncWarningThresholdMS;
 
     /**
+     * 日志文件大小限制 【默认禁用】
      * This parameter limit the size of each txnlog to a given limit (KB).
      * It does not affect how often the system will take a snapshot [zookeeper.snapCount]
      * We roll the txnlog when either of the two limits are reached.
@@ -133,12 +136,15 @@ public class FileTxnLog implements TxnLog, Closeable {
     File logFileWrite = null;
 
     /**
-     *
+     * 文件填充扩大工具
      */
-    private FilePadding filePadding = new FilePadding();
+    private final FilePadding filePadding = new FilePadding();
 
     private ServerStats serverStats;
 
+    /**
+     * 次刷盘耗时
+     */
     private volatile long syncElapsedMS = -1L;
 
     /**
@@ -258,6 +264,9 @@ public class FileTxnLog implements TxnLog, Closeable {
         return append(hdr, txn, null);
     }
 
+    /**
+     * 追加提案日志
+     */
     @Override
     public synchronized boolean append(TxnHeader hdr, Record txn, TxnDigest digest) throws IOException {
         if (hdr == null) {
@@ -272,6 +281,8 @@ public class FileTxnLog implements TxnLog, Closeable {
         } else {
             lastZxidSeen = hdr.getZxid();
         }
+
+        //region 创建并初始化新日志文件 【写入文件头并填充至默认文件大小】
         if (logStream == null) {
             LOG.info("Creating new log file: {}", Util.makeLogName(hdr.getZxid()));
 
@@ -286,6 +297,9 @@ public class FileTxnLog implements TxnLog, Closeable {
             filePadding.setCurrentSize(fos.getChannel().position());
             streamsToFlush.add(fos);
         }
+        //endregion
+
+        //region 序列化后依次写入CRC校验值和日志头、日志内容
         filePadding.padFile(fos.getChannel());
         byte[] buf = Util.marshallTxnEntry(hdr, txn, digest);
         if (buf == null || buf.length == 0) {
@@ -295,11 +309,13 @@ public class FileTxnLog implements TxnLog, Closeable {
         crc.update(buf, 0, buf.length);
         oa.writeLong(crc.getValue(), "txnEntryCRC");
         Util.writeTxnBytes(oa, buf);
+        //endregion
 
         return true;
     }
 
     /**
+     * 查找指定快照位置后对应的所有日志文件 【包括快照ID所在日志文件】
      * Find the log file that starts at, or just before, the snapshot. Return
      * this and all subsequent logs. Results are ordered by zxid of file,
      * ascending order.
@@ -308,9 +324,11 @@ public class FileTxnLog implements TxnLog, Closeable {
      * @param snapshotZxid return files at, or before this zxid
      * @return log files that starts at, or just before, the snapshot and subsequent ones
      */
-    public static File[] getLogFiles(File[] logDirList, long snapshotZxid) {
+    public static File[] getLogFiles(File[] logDirList/* 日志目录下日志与快照文件 */, long snapshotZxid) {
         List<File> files = Util.sortDataDir(logDirList, LOG_FILE_PREFIX, true);
+        //快照ID所在文件起始日志ID
         long logZxid = 0;
+        //region 遍历文件找到查询快照ID所在文件起始日志ID或最后日志ID
         // Find the log file that starts before or at the same time as the
         // zxid of the snapshot
         for (File f : files) {
@@ -324,7 +342,10 @@ public class FileTxnLog implements TxnLog, Closeable {
                 logZxid = fzxid;
             }
         }
-        List<File> v = new ArrayList<File>(5);
+        //endregion
+
+        //region 获取logZxid之后的所有日志文件
+        List<File> v = new ArrayList<>(5);
         for (File f : files) {
             long fzxid = Util.getZxidFromName(f.getName(), LOG_FILE_PREFIX);
             if (fzxid < logZxid) {
@@ -333,10 +354,11 @@ public class FileTxnLog implements TxnLog, Closeable {
             v.add(f);
         }
         return v.toArray(new File[0]);
-
+        //endregion
     }
 
     /**
+     * 获取最大的日志ID 【快进到指定最后日志文件位置遍历所有日志条目】
      * get the last zxid that was logged in the transaction logs
      *
      * @return the last zxid logged in the transaction logs
@@ -346,8 +368,7 @@ public class FileTxnLog implements TxnLog, Closeable {
         File[] files = getLogFiles(logDir.listFiles(), 0);
         long maxLog = files.length > 0 ? Util.getZxidFromName(files[files.length - 1].getName(), LOG_FILE_PREFIX) : -1;
 
-        // if a log file is more recent we must scan it to find
-        // the highest zxid
+        // if a log file is more recent we must scan it to find the highest zxid
         long zxid = maxLog;
         try (FileTxnLog txn = new FileTxnLog(logDir); TxnIterator itr = txn.read(maxLog)) {
             while (itr.next()) {
@@ -361,11 +382,13 @@ public class FileTxnLog implements TxnLog, Closeable {
     }
 
     /**
+     * 提交日志刷盘 【需确保所有脏数据均写入磁盘】
      * commit the logs. make sure that everything hits the
      * disk
      */
     @Override
     public synchronized void commit() throws IOException {
+        //region 刷盘并关闭相关输出流
         if (logStream != null) {
             logStream.flush();
         }
@@ -397,7 +420,9 @@ public class FileTxnLog implements TxnLog, Closeable {
         while (streamsToFlush.size() > 1) {
             streamsToFlush.poll().close();
         }
+        //endregion
 
+        //region 检测当前日志文件大小是否超出限制需要滚动新的日志文件
         // Roll the log file if we exceed the size limit
         if (txnLogSizeLimit > 0) {
             long logSize = getCurrentLogSize();
@@ -407,9 +432,11 @@ public class FileTxnLog implements TxnLog, Closeable {
                 rollLog();
             }
         }
+        //endregion
     }
 
     /**
+     * 获取上次刷盘耗时
      * @return elapsed sync time of transaction log in milliseconds
      */
     @Override
@@ -418,6 +445,7 @@ public class FileTxnLog implements TxnLog, Closeable {
     }
 
     /**
+     * 获取日志迭代器 【快进到指定日志ID位置】
      * start reading all the transactions from the given zxid
      *
      * @param zxid the zxid to start reading transactions from
@@ -443,6 +471,7 @@ public class FileTxnLog implements TxnLog, Closeable {
     }
 
     /**
+     * 清理指定ID之后的日志 【所在文件覆盖、之后文件删除】
      * truncate the current transaction logs
      *
      * @param zxid the zxid to truncate the logs to
@@ -472,6 +501,7 @@ public class FileTxnLog implements TxnLog, Closeable {
     }
 
     /**
+     * 读取日志文件头
      * read the header of the transaction file
      *
      * @param file the transaction file to read
@@ -523,6 +553,7 @@ public class FileTxnLog implements TxnLog, Closeable {
     }
 
     /**
+     * 记录读取位置的输入流
      * a class that keeps track of the position
      * in the input stream. The position points to offset
      * that has been consumed by the applications. It can
@@ -595,6 +626,7 @@ public class FileTxnLog implements TxnLog, Closeable {
     }
 
     /**
+     * 日志文件迭代器
      * this class implements the txnlog iterator interface
      * which is used for reading the transaction logs
      */

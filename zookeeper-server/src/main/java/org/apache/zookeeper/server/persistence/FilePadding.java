@@ -1,33 +1,27 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server.persistence;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+/**
+ * 文件填充扩大工具类
+ */
 public class FilePadding {
 
     private static final Logger LOG;
-    private static long preAllocSize = 65536 * 1024;
+
+    /**
+     * 默认64M
+     */
+    private static long preAllocSize = 64 * 1024 * 1024;
+
+    /**
+     * 扩大文件填充用、无意义
+     */
     private static final ByteBuffer fill = ByteBuffer.allocateDirect(1);
 
     static {
@@ -43,6 +37,9 @@ public class FilePadding {
         }
     }
 
+    /**
+     * 文件大小 【新创建时为日志文件头大小、扩大后为64M+16字节文件头】
+     */
     private long currentSize;
 
     /**
@@ -67,6 +64,7 @@ public class FilePadding {
     }
 
     /**
+     * 增大新日志文件到新文件大小【64M + 文件头16字节】
      * pad the current file to increase its size to the next multiple of preAllocSize greater than the current size and position
      *
      * @param fileChannel the fileChannel of the file to be padded
@@ -82,6 +80,7 @@ public class FilePadding {
     }
 
     /**
+     * 计算新日志文件大小 【默认16字节文件头 + 64M内容】
      * Calculates a new file size with padding. We only return a new size if
      * the current file position is sufficiently close (less than 4K) to end of
      * file and preAllocSize is &gt; 0.
