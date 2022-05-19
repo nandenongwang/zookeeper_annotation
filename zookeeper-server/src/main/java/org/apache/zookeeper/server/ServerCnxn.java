@@ -1,21 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server;
 
 import org.apache.jute.BinaryOutputArchive;
@@ -45,6 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
+ * 服务端侧连接基类
  * Interface to a Server connection - represents a connection from a client
  * to the server.
  */
@@ -55,7 +38,7 @@ public abstract class ServerCnxn implements Stats, Watcher {
     public static final Object me = new Object();
     private static final Logger LOG = LoggerFactory.getLogger(ServerCnxn.class);
 
-    private Set<Id> authInfo = Collections.newSetFromMap(new ConcurrentHashMap<Id, Boolean>());
+    private final Set<Id> authInfo = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     /**
      * If the client is of old version, we don't send r-o mode info to it.
@@ -73,6 +56,9 @@ public abstract class ServerCnxn implements Stats, Watcher {
      */
     final ZooKeeperServer zkServer;
 
+    /**
+     * 断开连接原因
+     */
     public enum DisconnectReason {
         UNKNOWN("unknown"),
         SERVER_SHUTDOWN("server_shutdown"),
@@ -181,13 +167,15 @@ public abstract class ServerCnxn implements Stats, Watcher {
      *                 used to decide which cache (e.g. read response cache,
      *                 list of children response cache, ...) object to look up to when applicable.
      */
-    public abstract int sendResponse(ReplyHeader h, Record r, String tag,
-                                     String cacheKey, Stat stat, int opCode) throws IOException;
+    public abstract int sendResponse(ReplyHeader h, Record r, String tag, String cacheKey, Stat stat, int opCode) throws IOException;
 
     public int sendResponse(ReplyHeader h, Record r, String tag) throws IOException {
         return sendResponse(h, r, tag, null, null, -1);
     }
 
+    /**
+     * 序列化可序列化对象到byte[]
+     */
     protected byte[] serializeRecord(Record record) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream(ZooKeeperServer.intBufferStartingSizeBytes);
         BinaryOutputArchive bos = BinaryOutputArchive.getArchive(baos);
@@ -198,11 +186,11 @@ public abstract class ServerCnxn implements Stats, Watcher {
     /**
      * 序列化响应
      */
-    protected ByteBuffer[] serialize(ReplyHeader h, Record r, String tag,
-                                     String cacheKey, Stat stat, int opCode) throws IOException {
+    protected ByteBuffer[] serialize(ReplyHeader h, Record r, String tag, String cacheKey, Stat stat, int opCode) throws IOException {
         byte[] header = serializeRecord(h);
         byte[] data = null;
         if (r != null) {
+            //region 根据cacheKey查询并更新缓存 【获取数据、获取子节点类操作且开启缓存时】
             ResponseCache cache = null;
             Counter cacheHit = null, cacheMiss = null;
             switch (opCode) {
@@ -239,13 +227,19 @@ public abstract class ServerCnxn implements Stats, Watcher {
             } else {
                 data = serializeRecord(r);
             }
+            //endregion
         }
+
+        //region 更新响应大小统计
         int dataLength = data == null ? 0 : data.length;
         int packetLength = header.length + dataLength;
         ServerStats serverStats = serverStats();
         if (serverStats != null) {
             serverStats.updateClientResponseSize(packetLength);
         }
+        //endregion
+
+        //region 输出完整序列化buffer
         ByteBuffer lengthBuffer = ByteBuffer.allocate(4).putInt(packetLength);
         lengthBuffer.rewind();
 
@@ -258,11 +252,15 @@ public abstract class ServerCnxn implements Stats, Watcher {
             buffers[2] = ByteBuffer.wrap(data);
         }
         return buffers;
+        //endregion
     }
 
     /* notify the client the session is closing and close/cleanup socket */
     public abstract void sendCloseSession();
 
+    /**
+     * 监听器执行接口
+     */
     public abstract void process(WatchedEvent event);
 
     public abstract long getSessionId();
@@ -561,7 +559,7 @@ public abstract class ServerCnxn implements Stats, Watcher {
     }
 
     public synchronized Map<String, Object> getConnectionInfo(boolean brief) {
-        Map<String, Object> info = new LinkedHashMap<String, Object>();
+        Map<String, Object> info = new LinkedHashMap<>();
         info.put("remote_socket_address", getRemoteSocketAddress());
         info.put("interest_ops", getInterestOps());
         info.put("outstanding_requests", getOutstandingRequests());
