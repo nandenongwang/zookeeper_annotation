@@ -1,35 +1,20 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server.watch;
 
-import java.io.PrintWriter;
 import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.Watcher.Event.EventType;
 
+import java.io.PrintWriter;
+
+/**
+ * 服务端watcher管理器接口
+ */
 public interface IWatchManager {
 
     /**
      * Add watch to specific path.
      *
-     * @param path znode path
+     * @param path    znode path
      * @param watcher watcher object reference
-     *
      * @return true if the watcher added is not already present
      */
     boolean addWatch(String path, Watcher watcher);
@@ -37,10 +22,9 @@ public interface IWatchManager {
     /**
      * Add watch to specific path.
      *
-     * @param path znode path
-     * @param watcher watcher object reference
+     * @param path        znode path
+     * @param watcher     watcher object reference
      * @param watcherMode the watcher mode to use
-     *
      * @return true if the watcher added is not already present
      */
     default boolean addWatch(String path, Watcher watcher, WatcherMode watcherMode) {
@@ -53,9 +37,8 @@ public interface IWatchManager {
     /**
      * Checks the specified watcher exists for the given path.
      *
-     * @param path znode path
+     * @param path    znode path
      * @param watcher watcher object reference
-     *
      * @return true if the watcher exists, false otherwise
      */
     boolean containsWatcher(String path, Watcher watcher);
@@ -63,9 +46,8 @@ public interface IWatchManager {
     /**
      * Removes the specified watcher for the given path.
      *
-     * @param path znode path
+     * @param path    znode path
      * @param watcher watcher object reference
-     *
      * @return true if the watcher successfully removed, false otherwise
      */
     boolean removeWatcher(String path, Watcher watcher);
@@ -82,7 +64,6 @@ public interface IWatchManager {
      *
      * @param path znode path
      * @param type the watch event type
-     *
      * @return the watchers have been notified
      */
     WatcherOrBitSet triggerWatch(String path, EventType type);
@@ -91,10 +72,9 @@ public interface IWatchManager {
      * Distribute the watch event for the given path, but ignore those
      * suppressed ones.
      *
-     * @param path znode path
-     * @param type the watch event type
+     * @param path     znode path
+     * @param type     the watch event type
      * @param suppress the suppressed watcher set
-     *
      * @return the watchers have been notified
      */
     WatcherOrBitSet triggerWatch(String path, EventType type, WatcherOrBitSet suppress);
@@ -139,9 +119,8 @@ public interface IWatchManager {
      * String representation of watches. Warning, may be large!
      *
      * @param pwriter the writer to dump the watches
-     * @param byPath iff true output watches by paths, otw output
-     * watches by connection
-     *
+     * @param byPath  iff true output watches by paths, otw output
+     *                watches by connection
      */
     void dumpWatches(PrintWriter pwriter, boolean byPath);
 

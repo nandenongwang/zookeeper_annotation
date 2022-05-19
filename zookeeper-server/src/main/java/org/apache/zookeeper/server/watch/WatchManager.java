@@ -1,30 +1,5 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server.watch;
 
-import java.io.PrintWriter;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.Watcher.Event.EventType;
@@ -35,7 +10,12 @@ import org.apache.zookeeper.server.ZooTrace;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.PrintWriter;
+import java.util.*;
+import java.util.Map.Entry;
+
 /**
+ * 服务端watcher管理器
  * This class manages watches. It allows watches to be associated with a string
  * and removes watchers and their watches in addition to managing triggers.
  */
@@ -43,12 +23,24 @@ public class WatchManager implements IWatchManager {
 
     private static final Logger LOG = LoggerFactory.getLogger(WatchManager.class);
 
+    /**
+     * 路径被哪些监听器监听
+     */
     private final Map<String, Set<Watcher>> watchTable = new HashMap<>();
 
+    /**
+     * 监听器监听了哪些路径
+     */
     private final Map<Watcher, Set<String>> watch2Paths = new HashMap<>();
 
+    /**
+     * 监听项监听模式管理器
+     */
     private final WatcherModeManager watcherModeManager = new WatcherModeManager();
 
+    /**
+     * 总共有多少监听器
+     */
     @Override
     public synchronized int size() {
         int result = 0;
@@ -58,15 +50,24 @@ public class WatchManager implements IWatchManager {
         return result;
     }
 
+    /**
+     * 监听器是否失效 【server客户端连接类型监听器、并且该连接读取失败或断开等】
+     */
     private boolean isDeadWatcher(Watcher watcher) {
         return watcher instanceof ServerCnxn && ((ServerCnxn) watcher).isStale();
     }
 
+    /**
+     * 添加监听器 【默认标准类型】
+     */
     @Override
     public boolean addWatch(String path, Watcher watcher) {
         return addWatch(path, watcher, WatcherMode.DEFAULT_WATCHER_MODE);
     }
 
+    /**
+     * 添加监听器 【加入到各内存数据结构】
+     */
     @Override
     public synchronized boolean addWatch(String path, Watcher watcher, WatcherMode watcherMode) {
         if (isDeadWatcher(watcher)) {
@@ -96,6 +97,9 @@ public class WatchManager implements IWatchManager {
         return paths.add(path);
     }
 
+    /**
+     * 移除监听器 【从各内存数据结构中移除】
+     */
     @Override
     public synchronized void removeWatcher(Watcher watcher) {
         Set<String> paths = watch2Paths.remove(watcher);
@@ -114,13 +118,19 @@ public class WatchManager implements IWatchManager {
         }
     }
 
+    /**
+     * 获取要触发的所有监听器
+     */
     @Override
     public WatcherOrBitSet triggerWatch(String path, EventType type) {
         return triggerWatch(path, type, null);
     }
 
+    /**
+     * 获取要触发的所有监听器
+     */
     @Override
-    public WatcherOrBitSet triggerWatch(String path, EventType type, WatcherOrBitSet supress) {
+    public WatcherOrBitSet triggerWatch(String path, EventType type, WatcherOrBitSet supress/* 上次执行过的监听器 */) {
         WatchedEvent e = new WatchedEvent(type, KeeperState.SyncConnected, path);
         Set<Watcher> watchers = new HashSet<>();
         PathParentIterator pathParentIterator = getPathParentIterator(path);
@@ -134,13 +144,14 @@ public class WatchManager implements IWatchManager {
                 while (iterator.hasNext()) {
                     Watcher watcher = iterator.next();
                     WatcherMode watcherMode = watcherModeManager.getWatcherMode(watcher, localPath);
-                    if (watcherMode.isRecursive()) {
+                    if (watcherMode.isRecursive()/* 标准模式==false */) {
                         if (type != EventType.NodeChildrenChanged) {
                             watchers.add(watcher);
                         }
-                    } else if (!pathParentIterator.atParentPath()) {
+                    } else if (!pathParentIterator.atParentPath()/* level==0 */) {
+                        //加入待触发监听器
                         watchers.add(watcher);
-                        if (!watcherMode.isPersistent()) {
+                        if (!watcherMode.isPersistent()/* 标准模式==false */) {
                             iterator.remove();
                             Set<String> paths = watch2Paths.get(watcher);
                             if (paths != null) {
@@ -161,6 +172,7 @@ public class WatchManager implements IWatchManager {
             return null;
         }
 
+        //触发所有监听器执行
         for (Watcher w : watchers) {
             if (supress != null && supress.contains(w)) {
                 continue;
@@ -188,7 +200,7 @@ public class WatchManager implements IWatchManager {
                 // Other types not logged.
                 break;
         }
-
+        //返回本次执行过的监听器
         return new WatcherOrBitSet(watchers);
     }
 
@@ -207,6 +219,9 @@ public class WatchManager implements IWatchManager {
         return sb.toString();
     }
 
+    /**
+     * 打印所有监听器
+     */
     @Override
     public synchronized void dumpWatches(PrintWriter pwriter, boolean byPath) {
         if (byPath) {
@@ -248,6 +263,9 @@ public class WatchManager implements IWatchManager {
         return false;
     }
 
+    /**
+     * 移除监听器
+     */
     @Override
     public synchronized boolean removeWatcher(String path, Watcher watcher) {
         Set<String> paths = watch2Paths.get(watcher);
@@ -310,10 +328,15 @@ public class WatchManager implements IWatchManager {
         return watcherModeManager.getRecursiveQty();
     }
 
+    /**
+     * 获取路径迭代器
+     * 如：/root/hello/world 会生成 【/root/hello/world、/root/hello、/root、/】
+     */
     private PathParentIterator getPathParentIterator(String path) {
         if (watcherModeManager.getRecursiveQty() == 0) {
             return PathParentIterator.forPathOnly(path);
         }
         return PathParentIterator.forAll(path);
     }
+
 }

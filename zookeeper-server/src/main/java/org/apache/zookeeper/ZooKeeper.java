@@ -211,21 +211,26 @@ public class ZooKeeper implements AutoCloseable {
     }
 
     /**
+     * 监听器注册项
      * Register a watcher for a particular path.
      */
     public abstract static class WatchRegistration {
 
-        private Watcher watcher;
-        private String clientPath;
+        private final Watcher watcher;
+        private final String clientPath;
 
         public WatchRegistration(Watcher watcher, String clientPath) {
             this.watcher = watcher;
             this.clientPath = clientPath;
         }
 
+        /**
+         * 获取不同类型的监听器存储
+         */
         protected abstract Map<String, Set<Watcher>> getWatches(int rc);
 
         /**
+         * 添加监听器到对应类型存储中
          * Register the watcher with the set of watches on path.
          *
          * @param rc the result code of the operation that attempted to
