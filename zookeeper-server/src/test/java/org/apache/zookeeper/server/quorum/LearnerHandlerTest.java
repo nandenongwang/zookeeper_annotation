@@ -116,6 +116,7 @@ public class LearnerHandlerTest extends ZKTestCase {
 
         }
 
+        @Override
         public long calculateTxnLogSizeLimit() {
             return 1;
         }

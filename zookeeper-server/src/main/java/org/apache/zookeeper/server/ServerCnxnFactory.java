@@ -203,6 +203,9 @@ public abstract class ServerCnxnFactory {
         }
     }
 
+    /**
+     * 注册服务侧连接MBean
+     */
     public void registerConnection(ServerCnxn serverCnxn) {
         if (zkServer != null) {
             ConnectionBean jmxConnectionBean = new ConnectionBean(serverCnxn, zkServer);

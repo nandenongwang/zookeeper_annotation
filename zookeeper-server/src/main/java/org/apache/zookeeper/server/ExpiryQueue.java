@@ -12,6 +12,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 超时检测队列
+ * 按超时间隔分桶、每次poll若到了超时时间：获取到期数据并更新下次到期时间、且移除到期桶
  * ExpiryQueue tracks elements in time sorted fixed duration buckets.
  * It's used by SessionTrackerImpl to expire sessions and NIOServerCnxnFactory
  * to expire connections.

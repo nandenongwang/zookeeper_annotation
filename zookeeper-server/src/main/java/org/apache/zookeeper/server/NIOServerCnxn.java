@@ -435,6 +435,9 @@ public class NIOServerCnxn extends ServerCnxn {
         }
     }
 
+    /**
+     * 处理初始连接包
+     */
     private void readConnectRequest() throws IOException, InterruptedException, ClientCnxnLimitException {
         if (!isZKServerRunning()) {
             throw new IOException("ZooKeeperServer not running");
@@ -444,7 +447,7 @@ public class NIOServerCnxn extends ServerCnxn {
     }
 
     /**
-     * 分批【2048字符】写出命令响应
+     * 批量字符Writer 【每2048字符写出命令响应、用于写出运维命令响应】
      * This class wraps the sendBuffer method of NIOServerCnxn. It is
      * responsible for chunking up the response to a client. Rather
      * than cons'ing up a response fully in memory, which may be large
@@ -455,6 +458,7 @@ public class NIOServerCnxn extends ServerCnxn {
         private StringBuffer sb = new StringBuffer();
 
         /**
+         * 检查并发送一块数据
          * Check if we are ready to send another chunk.
          *
          * @param force force sending, even if not a full chunk
@@ -467,6 +471,9 @@ public class NIOServerCnxn extends ServerCnxn {
             }
         }
 
+        /**
+         * 强制刷出并关闭
+         */
         @Override
         public void close() throws IOException {
             if (sb == null) {
@@ -476,11 +483,17 @@ public class NIOServerCnxn extends ServerCnxn {
             sb = null; // clear out the ref to ensure no reuse
         }
 
+        /**
+         * 强制刷出
+         */
         @Override
         public void flush() throws IOException {
             checkFlush(true);
         }
 
+        /**
+         * 写入缓存buffer并检查是否可刷出
+         */
         @Override
         public void write(char[] cbuf, int off, int len) throws IOException {
             sb.append(cbuf, off, len);

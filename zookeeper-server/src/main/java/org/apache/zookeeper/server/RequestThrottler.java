@@ -1,43 +1,27 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import java.util.concurrent.LinkedBlockingQueue;
 import org.apache.zookeeper.common.Time;
 import org.apache.zookeeper.util.ServiceUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.concurrent.LinkedBlockingQueue;
+
 /**
+ * 请求限流阀 【所有连接请求都会进入阀门缓冲队列再由各自处理器链进行处理】
  * When enabled, the RequestThrottler limits the number of outstanding requests
  * currently submitted to the request processor pipeline. The throttler augments
  * the limit imposed by the <code>globalOutstandingLimit</code> that is enforced
  * by the connection layer ({@link NIOServerCnxn}, {@link NettyServerCnxn}).
- *
+ * <p>
  * The connection layer limit applies backpressure against the TCP connection by
  * disabling selection on connections once the request limit is reached. However,
  * the connection layer always allows a connection to send at least one request
  * before disabling selection on that connection. Thus, in a scenario with 40000
  * client connections, the total number of requests inflight may be as high as
  * 40000 even if the <code>globalOustandingLimit</code> was set lower.
- *
+ * <p>
  * The RequestThrottler addresses this issue by adding additional queueing. When
  * enabled, client connections no longer submit requests directly to the request
  * processor pipeline but instead to the RequestThrottler. The RequestThrottler
@@ -46,13 +30,13 @@ import org.slf4j.LoggerFactory;
  * outstanding requests is higher than <code>maxRequests</code>, the throttler
  * will continually stall for <code>stallTime</code> milliseconds until
  * underlimit.
- *
+ * <p>
  * The RequestThrottler can also optionally drop stale requests rather than
  * submit them to the processor pipeline. A stale request is a request sent
  * by a connection that is already closed, and/or a request whose latency
  * will end up being higher than its associated session timeout. The notion
  * of staleness is configurable, @see Request for more details.
- *
+ * <p>
  * To ensure ordering guarantees, if a request is ever dropped from a connection
  * that connection is closed and flagged as invalid. All subsequent requests
  * inflight from that connection are then dropped as well.
@@ -78,7 +62,7 @@ public class RequestThrottler extends ZooKeeperCriticalThread {
     /**
      * The total number of outstanding requests allowed before the throttler
      * starts stalling.
-     *
+     * <p>
      * When maxRequests = 0, throttling is disabled.
      */
     private static volatile int maxRequests = Integer.getInteger("zookeeper.request_throttle_max_requests", 0);
@@ -182,9 +166,10 @@ public class RequestThrottler extends ZooKeeperCriticalThread {
                     final long elapsedTime = Time.currentElapsedTime() - request.requestThrottleQueueTime;
                     ServerMetrics.getMetrics().REQUEST_THROTTLE_QUEUE_TIME.add(elapsedTime);
                     if (shouldThrottleOp(request, elapsedTime)) {
-                      request.setIsThrottled(true);
-                      ServerMetrics.getMetrics().THROTTLED_OPS.add(1);
+                        request.setIsThrottled(true);
+                        ServerMetrics.getMetrics().THROTTLED_OPS.add(1);
                     }
+                    //将请求提交到zkServer第一个处理器开始处理
                     zks.submitRequestNow(request);
                 }
             }

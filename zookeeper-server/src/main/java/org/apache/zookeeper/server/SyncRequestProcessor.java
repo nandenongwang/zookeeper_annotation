@@ -1,53 +1,33 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server;
+
+import org.apache.zookeeper.common.Time;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.Flushable;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.Objects;
 import java.util.Queue;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeUnit;
-import org.apache.zookeeper.common.Time;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.concurrent.*;
 
 /**
+ * 将提案追加到日志中、并批量刷盘后提交到处理链中 【同时会检测生成新快照文件】
  * This RequestProcessor logs requests to disk. It batches the requests to do
  * the io efficiently. The request is not passed to the next RequestProcessor
  * until its log has been synced to disk.
- *
+ * <p>
  * SyncRequestProcessor is used in 3 different cases
  * 1. Leader - Sync request to disk and forward it to AckRequestProcessor which
- *             send ack back to itself.
+ * send ack back to itself.
  * 2. Follower - Sync request to disk and forward request to
- *             SendAckRequestProcessor which send the packets to leader.
- *             SendAckRequestProcessor is flushable which allow us to force
- *             push packets to leader.
+ * SendAckRequestProcessor which send the packets to leader.
+ * SendAckRequestProcessor is flushable which allow us to force
+ * push packets to leader.
  * 3. Observer - Sync committed request to disk (received as INFORM packet).
- *             It never send ack back to the leader, so the nextProcessor will
- *             be null. This change the semantic of txnlog on the observer
- *             since it only contains committed txns.
+ * It never send ack back to the leader, so the nextProcessor will
+ * be null. This change the semantic of txnlog on the observer
+ * since it only contains committed txns.
  */
 public class SyncRequestProcessor extends ZooKeeperCriticalThread implements RequestProcessor {
 
@@ -55,7 +35,9 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
 
     private static final Request REQUEST_OF_DEATH = Request.requestOfDeath;
 
-    /** The number of log entries to log before starting a snapshot */
+    /**
+     * The number of log entries to log before starting a snapshot
+     */
     private static int snapCount = ZooKeeperServer.getSnapCount();
 
     /**
@@ -95,6 +77,7 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
     /**
      * used by tests to check for changing
      * snapcounts
+     *
      * @param count
      */
     public static void setSnapCount(int count) {
@@ -103,6 +86,7 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
 
     /**
      * used by tests to get the snapcount
+     *
      * @return the snapcount
      */
     public static int getSnapCount() {
@@ -118,7 +102,9 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
         return 0;
     }
 
-    /** If both flushDelay and maxMaxBatchSize are set (bigger than 0), flush
+    /**
+     * 是否达到刷盘阈值 【已过延时时间或达到批量数】
+     * If both flushDelay and maxMaxBatchSize are set (bigger than 0), flush
      * whenever either condition is hit. If only one or the other is
      * set, flush only when the relevant condition is hit.
      */
@@ -134,17 +120,21 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
     /**
      * used by tests to check for changing
      * snapcounts
+     *
      * @param size
      */
     public static void setSnapSizeInBytes(long size) {
         snapSizeInBytes = size;
     }
 
+    /**
+     * 是否应该创建新快照
+     */
     private boolean shouldSnapshot() {
         int logCount = zks.getZKDatabase().getTxnCount();
         long logSize = zks.getZKDatabase().getTxnSize();
         return (logCount > (snapCount / 2 + randRoll))
-               || (snapSizeInBytes > 0 && logSize > (snapSizeInBytes / 2 + randSize));
+                || (snapSizeInBytes > 0 && logSize > (snapSizeInBytes / 2 + randSize));
     }
 
     private void resetSnapshotStats() {
@@ -164,19 +154,26 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
 
                 long pollTime = Math.min(zks.getMaxWriteQueuePollTime(), getRemainingDelay());
                 Request si = queuedRequests.poll(pollTime, TimeUnit.MILLISECONDS);
+
+                //region 超时时间内获取不到请求 【刷出当前缓冲请求并阻塞获取请求】
                 if (si == null) {
                     /* We timed out looking for more writes to batch, go ahead and flush immediately */
                     flush();
                     si = queuedRequests.take();
                 }
+                //endregion
 
+                //region 接受到关闭请求、退出
                 if (si == REQUEST_OF_DEATH) {
                     break;
                 }
+                //endregion
+
 
                 long startProcessTime = Time.currentElapsedTime();
                 ServerMetrics.getMetrics().SYNC_PROCESSOR_QUEUE_TIME.add(startProcessTime - si.syncQueueStartTime);
 
+                //region 追加事务日志 【并判断是否需要保存快照】
                 // track the number of records written to the log
                 if (!si.isThrottled() && zks.getZKDatabase().append(si)) {
                     if (shouldSnapshot()) {
@@ -201,7 +198,9 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
                             }.start();
                         }
                     }
-                } else if (toFlush.isEmpty()) {
+                }
+                //endregion
+                else if (toFlush.isEmpty()) {
                     // optimization for read heavy workloads
                     // iff this is a read or a throttled request(which doesn't need to be written to the disk),
                     // and there are no pending flushes (writes), then just pass this to the next processor
@@ -225,6 +224,9 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
         LOG.info("SyncRequestProcessor exited!");
     }
 
+    /**
+     * 将追加的日志提交刷盘并提交到下一处理器中
+     */
     private void flush() throws IOException, RequestProcessorException {
         if (this.toFlush.isEmpty()) {
             return;
@@ -272,6 +274,9 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
         }
     }
 
+    /**
+     * 添加请求到缓冲中等待处理
+     */
     @Override
     public void processRequest(final Request request) {
         Objects.requireNonNull(request, "Request cannot be null");
