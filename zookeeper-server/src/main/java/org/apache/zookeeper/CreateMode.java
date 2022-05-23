@@ -1,21 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper;
 
 import org.apache.yetus.audience.InterfaceAudience;
@@ -29,23 +11,31 @@ import org.slf4j.LoggerFactory;
 public enum CreateMode {
 
     /**
+     * 永久节点
      * The znode will not be automatically deleted upon client's disconnect.
      */
     PERSISTENT(0, false, false, false, false),
+
     /**
+     * 永久顺序节点
      * The znode will not be automatically deleted upon client's disconnect,
      * and its name will be appended with a monotonically increasing number.
      */
     PERSISTENT_SEQUENTIAL(2, false, true, false, false),
+
     /**
+     * 临时节点
      * The znode will be deleted upon the client's disconnect.
      */
     EPHEMERAL(1, true, false, false, false),
+
     /**
+     * 临时顺序节点
      * The znode will be deleted upon the client's disconnect, and its name
      * will be appended with a monotonically increasing number.
      */
     EPHEMERAL_SEQUENTIAL(3, true, true, false, false),
+
     /**
      * 容器节点 【子节点为0时会自动删除其他与持久节点相同】
      * The znode will be a container node. Container
@@ -57,13 +47,17 @@ public enum CreateMode {
      * when creating children inside of this container node.
      */
     CONTAINER(4, false, false, true, false),
+
     /**
+     * 可过期节点
      * The znode will not be automatically deleted upon client's disconnect.
      * However if the znode has not been modified within the given TTL, it
      * will be deleted once it has no children.
      */
     PERSISTENT_WITH_TTL(5, false, false, false, true),
+
     /**
+     * 可过期顺序节点
      * The znode will not be automatically deleted upon client's disconnect,
      * and its name will be appended with a monotonically increasing number.
      * However if the znode has not been modified within the given TTL, it

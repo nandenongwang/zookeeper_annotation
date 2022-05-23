@@ -19,22 +19,22 @@
 package org.apache.zookeeper.server;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import java.io.IOException;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
 import org.apache.jute.InputArchive;
 import org.apache.jute.OutputArchive;
 import org.apache.jute.Record;
 import org.apache.zookeeper.data.Stat;
 import org.apache.zookeeper.data.StatPersisted;
 
+import java.io.IOException;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+
 /**
  * This class contains the data for a node in the data tree.
  * <p>
  * A data node contains a reference to its parent, a byte array as its data, an
  * array of ACLs, a stat object, and a set of its children's paths.
- *
  */
 @SuppressFBWarnings({"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
 public class DataNode implements Record {
@@ -46,20 +46,35 @@ public class DataNode implements Record {
     // optimize the performance.
     volatile boolean digestCached;
 
-    /** the data for this datanode */
+    /**
+     * 节点数据
+     * the data for this datanode
+     */
     byte[] data;
 
     /**
+     * 权限缓存指针
      * the acl map long for this datanode. the datatree has the map
      */
     Long acl;
 
     /**
+     * 节点状态
      * the stat for this node that is persisted to disk.
+     * czxid：节点创建时的zxid.
+     * mzxid：节点最新一次更新发生时的zxid.
+     * ctime：节点创建时间
+     * mtime：节点最新一次更新时间
+     * version：节点数据的更新次数(版本)
+     * cversion：其子节点的更新次数(版本)
+     * aversion：aclVersion,节点ACL(授权信息)的更新次数
+     * ephemeralOwner：若该节点为ephemeral节点, ephemeralOwner值表示与该节点绑定的session id,否则为0
+     * pzxid：该节点的子节点列表最后一次被更新（创建或删除节点）的zxid(和孙子无关)
      */
     public StatPersisted stat;
 
     /**
+     * 所有子节点
      * the list of children for this node. note that the list of children string
      * does not contain the parent path -- just the last part of the path. This
      * should be synchronized on except deserializing (for speed up issues).
@@ -78,12 +93,9 @@ public class DataNode implements Record {
     /**
      * create a DataNode with parent, data, acls and stat
      *
-     * @param data
-     *            the data to be set
-     * @param acl
-     *            the acls for this node
-     * @param stat
-     *            the stat for this node.
+     * @param data the data to be set
+     * @param acl  the acls for this node
+     * @param stat the stat for this node.
      */
     public DataNode(byte[] data, Long acl, StatPersisted stat) {
         this.data = data;
@@ -94,8 +106,7 @@ public class DataNode implements Record {
     /**
      * Method that inserts a child into the children set
      *
-     * @param child
-     *            to be inserted
+     * @param child to be inserted
      * @return true if this set did not already contain the specified element
      */
     public synchronized boolean addChild(String child) {
@@ -132,7 +143,7 @@ public class DataNode implements Record {
      * convenience methods to get the children
      *
      * @return the children of this datanode. If the datanode has no children, empty
-     *         set is returned
+     * set is returned
      */
     public synchronized Set<String> getChildren() {
         if (children == null) {
