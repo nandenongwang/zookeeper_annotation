@@ -105,6 +105,9 @@ public class QuorumPeerMain {
 
     }
 
+    /**
+     * 初始化并启动
+     */
     protected void initializeAndRun(String[] args) throws ConfigException, IOException, AdminServerException {
 
         //region 有且仅有一个参数、解析指定配置文件
@@ -139,14 +142,21 @@ public class QuorumPeerMain {
         //endregion
     }
 
+    /**
+     * 集群启动
+     */
     public void runFromConfig(QuorumPeerConfig config) throws IOException, AdminServerException {
+        //region 注册log4j MBean
         try {
             ManagedUtil.registerLog4jMBeans();
         } catch (JMException e) {
             LOG.warn("Unable to register log4j JMX control", e);
         }
+        //endregion
 
         LOG.info("Starting quorum peer, myid=" + config.getServerId());
+
+        //region 加载度量组件提供者
         final MetricsProvider metricsProvider;
         try {
             metricsProvider = MetricsProviderBootstrap.startMetricsProvider(
@@ -155,9 +165,15 @@ public class QuorumPeerMain {
         } catch (MetricsProviderLifeCycleException error) {
             throw new IOException("Cannot boot MetricsProvider " + config.getMetricsProviderClassName(), error);
         }
+        //endregion
+
         try {
+            //region 初始化度量组件
             ServerMetrics.metricsProviderInitialized(metricsProvider);
             ProviderRegistry.initialize();
+            //endregion
+
+            //region 创建客户端连接攻城
             ServerCnxnFactory cnxnFactory = null;
             ServerCnxnFactory secureCnxnFactory = null;
 
@@ -170,7 +186,9 @@ public class QuorumPeerMain {
                 secureCnxnFactory = ServerCnxnFactory.createFactory();
                 secureCnxnFactory.configure(config.getSecureClientPortAddress(), config.getMaxClientCnxns(), config.getClientPortListenBacklog(), true);
             }
+            //endregion
 
+            //region 创建议员节点并配置相关参数
             quorumPeer = getQuorumPeer();
             quorumPeer.setTxnFactory(new FileTxnSnapLog(config.getDataLogDir(), config.getDataDir()));
             quorumPeer.enableLocalSessions(config.areLocalSessionsEnabled());
@@ -217,15 +235,20 @@ public class QuorumPeerMain {
                 quorumPeer.setQuorumLearnerLoginContext(config.quorumLearnerLoginContext);
             }
             quorumPeer.setQuorumCnxnThreadsSize(config.quorumCnxnThreadsSize);
+
             quorumPeer.initialize();
 
             if (config.jvmPauseMonitorToRun) {
                 quorumPeer.setJvmPauseMonitor(new JvmPauseMonitor(config));
             }
 
+            //endregion
+
+            //region 启动议员节点
             quorumPeer.start();
             ZKAuditProvider.addZKStartStopAuditLog();
             quorumPeer.join();
+            //endregion
         } catch (InterruptedException e) {
             // warn, but generally this is ok
             LOG.warn("Quorum Peer interrupted", e);
@@ -238,12 +261,15 @@ public class QuorumPeerMain {
         }
     }
 
-    // @VisibleForTesting
+    /**
+     * 创建议员节点
+     */
     protected QuorumPeer getQuorumPeer() throws SaslException {
         return new QuorumPeer();
     }
 
     /**
+     * 关闭议员节点
      * Shutdowns properly the service, this method is not a public API.
      */
     public void close() {

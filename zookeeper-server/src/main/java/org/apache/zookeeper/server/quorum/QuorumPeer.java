@@ -619,7 +619,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     final Object QV_LOCK = new Object();
 
     /**
-     * My id
+     * My id 【serverId】
      */
     private long myid;
 
@@ -1120,6 +1120,9 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         adminServer = AdminServerFactory.createAdminServer();
     }
 
+    /**
+     * 初始化议员节点 【配置sasl认证服务组件】
+     */
     public void initialize() throws SaslException {
         // init quorum auth server & learner
         if (isQuorumSaslAuthEnabled()) {
@@ -1144,29 +1147,32 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         if (!getView().containsKey(myid)) {
             throw new RuntimeException("My id " + myid + " not in the peer list");
         }
-        //1、TODO
+        //1、载入持久化数据到内存数据库
         loadDataBase();
 
         //2、启动客户端连接server
         startServerCnxnFactory();
 
-        //3、启动8080端口的Http命令接口管理服务
+        //3、启动8080端口的Http命令管理接口服务
         try {
             adminServer.start();
         } catch (AdminServerException e) {
             LOG.warn("Problem starting AdminServer", e);
         }
 
-        //4、准备选举数据 【第一张选票 & 选举算法】
+        //4、准备选举数据 【节点选票 & 选举算法】
         startLeaderElection();
 
         //5、开启jvm停顿检测线程
         startJvmPauseMonitor();
 
-        //6、启动peer线程 【开启选举、维护角色】
+        //6、启动议员线程 【进行选举、处理日常工作(维护角色)】
         super.start();
     }
 
+    /**
+     * 加载并恢复内存数据库
+     */
     private void loadDataBase() {
         try {
             zkDb.loadDataBase();
@@ -2268,6 +2274,9 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         return qcmRef.get();
     }
 
+    /**
+     * 从给定文件中读取第一行数字
+     */
     private long readLongFromFile(String name) throws IOException {
         File file = new File(logFactory.getSnapDir(), name);
         BufferedReader br = new BufferedReader(new FileReader(file));
