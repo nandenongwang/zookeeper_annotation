@@ -142,6 +142,9 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
         randSize = Math.abs(ThreadLocalRandom.current().nextLong() % (snapSizeInBytes / 2));
     }
 
+    /**
+     * 持续将新日志追加到日志存储中
+     */
     @Override
     public void run() {
         try {

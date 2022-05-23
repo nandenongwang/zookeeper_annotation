@@ -82,6 +82,7 @@ public class Observer extends Learner {
     }
 
     /**
+     * observer
      * the main method called by the observer to observe the leader
      *
      * @throws Exception
@@ -169,11 +170,8 @@ public class Observer extends Learner {
     }
 
     /**
-     * 处理leader请求报文
+     * 处理从leader接收到的报文
      * Controls the response of an observer to the receipt of a quorumpacket
-     *
-     * @param qp
-     * @throws Exception
      */
     protected void processPacket(QuorumPacket qp) throws Exception {
         TxnLogEntry logEntry;

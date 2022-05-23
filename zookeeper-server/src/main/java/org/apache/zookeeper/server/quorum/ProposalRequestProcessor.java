@@ -1,21 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server.quorum;
 
 import org.apache.zookeeper.server.Request;
@@ -43,7 +25,7 @@ public class ProposalRequestProcessor implements RequestProcessor {
     // If this property is set, requests from Learners won't be forwarded
     // to the CommitProcessor in order to save resources
     public static final String FORWARD_LEARNER_REQUESTS_TO_COMMIT_PROCESSOR_DISABLED =
-          "zookeeper.forward_learner_requests_to_commit_processor_disabled";
+            "zookeeper.forward_learner_requests_to_commit_processor_disabled";
     private final boolean forwardLearnerRequestsToCommitProcessorDisabled;
 
     public ProposalRequestProcessor(LeaderZooKeeperServer zks, RequestProcessor nextProcessor) {
@@ -65,6 +47,7 @@ public class ProposalRequestProcessor implements RequestProcessor {
         syncProcessor.start();
     }
 
+    @Override
     public void processRequest(Request request) throws RequestProcessorException {
         /* In the following IF-THEN-ELSE block, we process syncs on the leader.
          * If the sync is coming from a follower, then the follower
@@ -73,24 +56,35 @@ public class ProposalRequestProcessor implements RequestProcessor {
          * contain the handler. In this case, we add it to syncHandler, and
          * call processRequest on the next processor.
          */
+
+        //region 处理learner转发的sync请求
         if (request instanceof LearnerSyncRequest) {
             zks.getLeader().processSync((LearnerSyncRequest) request);
-        } else {
+        }
+        //endregion
+
+        //region
+        else {
+            //1、交由Commit处理器处理 【写请求等待提案确认、读请求Commit会继续在处理器链上传播】
             if (shouldForwardToNextProcessor(request)) {
                 nextProcessor.processRequest(request);
             }
             if (request.getHdr() != null) {
+                //2、广播该提案给其他节点存储
                 // We need to sync and get consensus on any transactions
                 try {
                     zks.getLeader().propose(request);
                 } catch (XidRolloverException e) {
                     throw new RequestProcessorException(e.getMessage(), e);
                 }
+                //3、本节点存储该该提案
                 syncProcessor.processRequest(request);
             }
         }
+        //endregion
     }
 
+    @Override
     public void shutdown() {
         LOG.info("Shutting down");
         nextProcessor.shutdown();

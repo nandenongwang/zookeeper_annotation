@@ -19,15 +19,15 @@ public class ObserverZooKeeperServer extends LearnerZooKeeperServer {
     private static final Logger LOG = LoggerFactory.getLogger(ObserverZooKeeperServer.class);
 
     /**
+     * observer是否保存日志 【未开启则提案只应用到内存数据库中】
      * Enable since request processor for writing txnlog to disk and
      * take periodic snapshot. Default is ON.
      */
-
-    private boolean syncRequestProcessorEnabled = this.self.getSyncEnabled();
+    private final boolean syncRequestProcessorEnabled = this.self.getSyncEnabled();
 
     /*
      * Pending sync requests
-     */ ConcurrentLinkedQueue<Request> pendingSyncs = new ConcurrentLinkedQueue<Request>();
+     */ ConcurrentLinkedQueue<Request> pendingSyncs = new ConcurrentLinkedQueue<>();
 
     ObserverZooKeeperServer(FileTxnSnapLog logFactory, QuorumPeer self, ZKDatabase zkDb) throws IOException {
         super(logFactory, self.tickTime, self.minSessionTimeout, self.maxSessionTimeout, self.clientPortListenBacklog, zkDb, self);
@@ -44,12 +44,11 @@ public class ObserverZooKeeperServer extends LearnerZooKeeperServer {
     }
 
     /**
+     * 提交提案请求 【来自leader已提交提案通知】
      * Unlike a Follower, which sees a full request only during the PROPOSAL
      * phase, Observers get all the data required with the INFORM packet.
      * This method commits a request that has been unpacked by from an INFORM
      * received from the Leader.
-     *
-     * @param request
      */
     public void commitRequest(Request request) {
         if (syncRequestProcessorEnabled) {
@@ -60,6 +59,9 @@ public class ObserverZooKeeperServer extends LearnerZooKeeperServer {
     }
 
     /**
+     * 配置observer处理链
+     * ObserverRequestProcessor -> CommitProcessor -> FinalRequestProcessor
+     * SyncRequestProcessor
      * Set up the request processors for an Observer:
      * firstProcesor-&gt;commitProcessor-&gt;finalProcessor
      */

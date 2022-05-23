@@ -1,37 +1,20 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server.quorum;
 
-import java.io.IOException;
-import java.util.concurrent.LinkedBlockingQueue;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooDefs.OpCode;
-import org.apache.zookeeper.server.Request;
-import org.apache.zookeeper.server.RequestProcessor;
-import org.apache.zookeeper.server.ServerMetrics;
-import org.apache.zookeeper.server.ZooKeeperCriticalThread;
-import org.apache.zookeeper.server.ZooTrace;
+import org.apache.zookeeper.server.*;
 import org.apache.zookeeper.txn.ErrorTxn;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.util.concurrent.LinkedBlockingQueue;
+
 /**
+ * observer处理器 【与follower处理器基本一致】
+ * 1、检测升级session
+ * 2、转发事务请求给leader处理
+ * 3、commit等待leader请求完成通知
  * This RequestProcessor forwards any requests that modify the state of the
  * system to the Leader.
  */
@@ -45,13 +28,14 @@ public class ObserverRequestProcessor extends ZooKeeperCriticalThread implements
 
     // We keep a queue of requests. As requests get submitted they are
     // stored here. The queue is drained in the run() method.
-    LinkedBlockingQueue<Request> queuedRequests = new LinkedBlockingQueue<Request>();
+    LinkedBlockingQueue<Request> queuedRequests = new LinkedBlockingQueue<>();
 
     boolean finished = false;
 
     /**
      * Constructor - takes an ObserverZooKeeperServer to associate with
      * and the next processor to pass requests to after we're finished.
+     *
      * @param zks
      * @param nextProcessor
      */
@@ -95,30 +79,30 @@ public class ObserverRequestProcessor extends ZooKeeperCriticalThread implements
                 // of the sync operations this Observer has pending, so we
                 // add it to pendingSyncs.
                 switch (request.type) {
-                case OpCode.sync:
-                    zks.pendingSyncs.add(request);
-                    zks.getObserver().request(request);
-                    break;
-                case OpCode.create:
-                case OpCode.create2:
-                case OpCode.createTTL:
-                case OpCode.createContainer:
-                case OpCode.delete:
-                case OpCode.deleteContainer:
-                case OpCode.setData:
-                case OpCode.reconfig:
-                case OpCode.setACL:
-                case OpCode.multi:
-                case OpCode.check:
-                    zks.getObserver().request(request);
-                    break;
-                case OpCode.createSession:
-                case OpCode.closeSession:
-                    // Don't forward local sessions to the leader.
-                    if (!request.isLocalSession()) {
+                    case OpCode.sync:
+                        zks.pendingSyncs.add(request);
                         zks.getObserver().request(request);
-                    }
-                    break;
+                        break;
+                    case OpCode.create:
+                    case OpCode.create2:
+                    case OpCode.createTTL:
+                    case OpCode.createContainer:
+                    case OpCode.delete:
+                    case OpCode.deleteContainer:
+                    case OpCode.setData:
+                    case OpCode.reconfig:
+                    case OpCode.setACL:
+                    case OpCode.multi:
+                    case OpCode.check:
+                        zks.getObserver().request(request);
+                        break;
+                    case OpCode.createSession:
+                    case OpCode.closeSession:
+                        // Don't forward local sessions to the leader.
+                        if (!request.isLocalSession()) {
+                            zks.getObserver().request(request);
+                        }
+                        break;
                 }
             }
         } catch (RuntimeException e) { // spotbugs require explicit catch of RuntimeException
@@ -132,6 +116,7 @@ public class ObserverRequestProcessor extends ZooKeeperCriticalThread implements
     /**
      * Simply queue the request, which will be processed in FIFO order.
      */
+    @Override
     public void processRequest(Request request) {
         if (!finished) {
             Request upgradeRequest = null;
@@ -157,6 +142,7 @@ public class ObserverRequestProcessor extends ZooKeeperCriticalThread implements
     /**
      * Shutdown the processor.
      */
+    @Override
     public void shutdown() {
         LOG.info("Shutting down");
         finished = true;

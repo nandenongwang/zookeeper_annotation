@@ -1,21 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server.quorum;
 
 import org.apache.yetus.audience.InterfaceAudience;
@@ -107,6 +89,9 @@ public class QuorumPeerConfig {
     protected int purgeInterval = 0;
     protected boolean syncEnabled = true;
 
+    /**
+     * 配置文件内容
+     */
     protected String initialConfig;
 
     protected LearnerType peerType = LearnerType.PARTICIPANT;
@@ -171,6 +156,7 @@ public class QuorumPeerConfig {
     }
 
     /**
+     * 解析配置文件
      * Parse a ZooKeeper configuration file
      *
      * @param path the patch of the configuration file
@@ -178,7 +164,7 @@ public class QuorumPeerConfig {
      */
     public void parse(String path) throws ConfigException {
         LOG.info("Reading configuration from: " + path);
-
+        //region 读取指定位置配置文件成properties并解析
         try {
             File configFile = (new VerifyingFileFactory.Builder(LOG)
                     .warnForRelativePath()
@@ -200,7 +186,9 @@ public class QuorumPeerConfig {
         } catch (IllegalArgumentException e) {
             throw new ConfigException("Error processing " + path, e);
         }
+        //endregion
 
+        //region 加载并解析配置文件中配置的动态配置文件
         if (dynamicConfigFileStr != null) {
             try {
                 Properties dynamicCfg = new Properties();
@@ -245,6 +233,7 @@ public class QuorumPeerConfig {
                 }
             }
         }
+        //endregion
     }
 
     // This method gets the version from the end of dynamic file name.
@@ -268,6 +257,7 @@ public class QuorumPeerConfig {
     }
 
     /**
+     * 解析配置properties装配到配置类中
      * Parse config from a Properties.
      *
      * @param zkProp Properties to parse from.

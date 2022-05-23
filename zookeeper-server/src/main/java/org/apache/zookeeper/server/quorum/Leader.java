@@ -239,7 +239,7 @@ public class Leader extends LearnerMaster {
      * @param qv is a QuorumVerifier
      */
     public boolean isQuorumSynced(QuorumVerifier qv) {
-        HashSet<Long> ids = new HashSet<Long>();
+        HashSet<Long> ids = new HashSet<>();
         if (qv.getVotingMembers().containsKey(self.getId())) {
             ids.add(self.getId());
         }
@@ -253,12 +253,16 @@ public class Leader extends LearnerMaster {
         return qv.containsQuorum(ids);
     }
 
+    /**
+     * 内部通信ServerSocket
+     */
     private final List<ServerSocket> serverSockets = new LinkedList<>();
 
     public Leader(QuorumPeer self, LeaderZooKeeperServer zk) throws IOException {
         this.self = self;
         this.proposalStats = new BufferStats();
 
+        //region 创建并监听内部通信ServerSocket
         Set<InetSocketAddress> addresses;
         if (self.getQuorumListenOnAllIPs()) {
             addresses = self.getQuorumAddress().getWildcardAddresses();
@@ -275,10 +279,14 @@ public class Leader extends LearnerMaster {
         if (serverSockets.isEmpty()) {
             throw new IOException("Leader failed to initialize any of the following sockets: " + addresses);
         }
+        //endregion
 
         this.zk = zk;
     }
 
+    /**
+     * 创建并监听集群内部通信ServerSocket
+     */
     Optional<ServerSocket> createServerSocket(InetSocketAddress address, boolean portUnification, boolean sslQuorum) {
         ServerSocket serverSocket;
         try {
@@ -295,6 +303,8 @@ public class Leader extends LearnerMaster {
         }
         return Optional.empty();
     }
+
+    //region 消息类型名
 
     /**
      * This message is for follower to expect diff
@@ -333,7 +343,6 @@ public class Leader extends LearnerMaster {
      * now uptodate andt can start responding to clients.
      */
     static final int UPTODATE = 12;
-
     /**
      * This message is the first that a follower receives from the leader.
      * It has the protocol version and the epoch of the leader.
@@ -372,7 +381,6 @@ public class Leader extends LearnerMaster {
      * follower) to determine liveliness.
      */
     static final int PING = 5;
-
     /**
      * This message type is to validate a session that should be active.
      */
@@ -399,13 +407,75 @@ public class Leader extends LearnerMaster {
      */
     static final int INFORMANDACTIVATE = 19;
 
-    final ConcurrentMap<Long, Proposal> outstandingProposals = new ConcurrentHashMap<Long, Proposal>();
+    /**
+     * 获取消息类型名称
+     * Get string representation of a given packet type
+     *
+     * @param packetType
+     * @return string representing the packet type
+     */
+    public static String getPacketType(int packetType) {
+        switch (packetType) {
+            case DIFF:
+                return "DIFF";
+            case TRUNC:
+                return "TRUNC";
+            case SNAP:
+                return "SNAP";
+            case OBSERVERINFO:
+                return "OBSERVERINFO";
+            case NEWLEADER:
+                return "NEWLEADER";
+            case FOLLOWERINFO:
+                return "FOLLOWERINFO";
+            case UPTODATE:
+                return "UPTODATE";
+            case LEADERINFO:
+                return "LEADERINFO";
+            case ACKEPOCH:
+                return "ACKEPOCH";
+            case REQUEST:
+                return "REQUEST";
+            case PROPOSAL:
+                return "PROPOSAL";
+            case ACK:
+                return "ACK";
+            case COMMIT:
+                return "COMMIT";
+            case COMMITANDACTIVATE:
+                return "COMMITANDACTIVATE";
+            case PING:
+                return "PING";
+            case REVALIDATE:
+                return "REVALIDATE";
+            case SYNC:
+                return "SYNC";
+            case INFORM:
+                return "INFORM";
+            case INFORMANDACTIVATE:
+                return "INFORMANDACTIVATE";
+            default:
+                return "UNKNOWN";
+        }
+    }
+    //endregion
 
-    private final ConcurrentLinkedQueue<Proposal> toBeApplied = new ConcurrentLinkedQueue<Proposal>();
+    /**
+     *
+     */
+    final ConcurrentMap<Long, Proposal> outstandingProposals = new ConcurrentHashMap<>();
+
+    /**
+     *
+     */
+    private final ConcurrentLinkedQueue<Proposal> toBeApplied = new ConcurrentLinkedQueue<>();
 
     // VisibleForTesting
     protected final Proposal newLeaderProposal = new Proposal();
 
+    /**
+     * 接收follower、observer连接、创建对应处理器
+     */
     class LearnerCnxAcceptor extends ZooKeeperCriticalThread {
 
         private final AtomicBoolean stop = new AtomicBoolean(false);
@@ -521,6 +591,7 @@ public class Leader extends LearnerMaster {
         }
 
     }
+
 
     StateSummary leaderStateSummary;
 
@@ -924,7 +995,7 @@ public class Leader extends LearnerMaster {
             //then it will remain the leader
             //otherwise an up-to-date follower will be designated as leader. This saves
             //leader election time, unless the designated leader fails
-            Long designatedLeader = getDesignatedLeader(p, zxid);
+            long designatedLeader = getDesignatedLeader(p, zxid);
 
             QuorumVerifier newQV = p.qvAcksetPairs.get(p.qvAcksetPairs.size() - 1).getQuorumVerifier();
 
@@ -1035,6 +1106,9 @@ public class Leader extends LearnerMaster {
         }
     }
 
+    /**
+     * 维护已达成一致可提交提案 【提案在后续处理器中应用后移除】
+     */
     static class ToBeAppliedRequestProcessor implements RequestProcessor {
 
         private final RequestProcessor next;
@@ -1093,6 +1167,7 @@ public class Leader extends LearnerMaster {
          *
          * @see org.apache.zookeeper.server.RequestProcessor#shutdown()
          */
+        @Override
         public void shutdown() {
             LOG.info("Shutting down");
             next.shutdown();
@@ -1101,6 +1176,7 @@ public class Leader extends LearnerMaster {
     }
 
     /**
+     * 向所有follower发送请求包
      * send a packet to all the followers ready to follow
      *
      * @param qp the packet to be sent
@@ -1114,6 +1190,7 @@ public class Leader extends LearnerMaster {
     }
 
     /**
+     * 向所有observer发送请求包
      * send a packet to all observers
      */
     void sendObserverPacket(QuorumPacket qp) {
@@ -1200,6 +1277,7 @@ public class Leader extends LearnerMaster {
     }
 
     /**
+     * 向所有follower发送提案
      * create a proposal and send it out to all the members
      *
      * @param request
@@ -1574,57 +1652,6 @@ public class Leader extends LearnerMaster {
         }
     }
 
-    /**
-     * Get string representation of a given packet type
-     *
-     * @param packetType
-     * @return string representing the packet type
-     */
-    public static String getPacketType(int packetType) {
-        switch (packetType) {
-            case DIFF:
-                return "DIFF";
-            case TRUNC:
-                return "TRUNC";
-            case SNAP:
-                return "SNAP";
-            case OBSERVERINFO:
-                return "OBSERVERINFO";
-            case NEWLEADER:
-                return "NEWLEADER";
-            case FOLLOWERINFO:
-                return "FOLLOWERINFO";
-            case UPTODATE:
-                return "UPTODATE";
-            case LEADERINFO:
-                return "LEADERINFO";
-            case ACKEPOCH:
-                return "ACKEPOCH";
-            case REQUEST:
-                return "REQUEST";
-            case PROPOSAL:
-                return "PROPOSAL";
-            case ACK:
-                return "ACK";
-            case COMMIT:
-                return "COMMIT";
-            case COMMITANDACTIVATE:
-                return "COMMITANDACTIVATE";
-            case PING:
-                return "PING";
-            case REVALIDATE:
-                return "REVALIDATE";
-            case SYNC:
-                return "SYNC";
-            case INFORM:
-                return "INFORM";
-            case INFORMANDACTIVATE:
-                return "INFORMANDACTIVATE";
-            default:
-                return "UNKNOWN";
-        }
-    }
-
     private boolean isRunning() {
         return self.isRunning() && zk.isRunning();
     }
@@ -1693,8 +1720,8 @@ public class Leader extends LearnerMaster {
     public void revalidateSession(QuorumPacket qp, LearnerHandler learnerHandler) throws IOException {
         ByteArrayInputStream bis = new ByteArrayInputStream(qp.getData());
         DataInputStream dis = new DataInputStream(bis);
-        long id = dis.readLong();
-        int to = dis.readInt();
+        long id = dis.readLong();//sessionId
+        int to = dis.readInt();//timeout
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(bos);
         dos.writeLong(id);

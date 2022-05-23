@@ -99,6 +99,7 @@ public class LearnerHandlerTest extends ZKTestCase {
             return 0;
         }
 
+        @Override
         public List<Proposal> getCommittedLog() {
             return committedLog;
         }

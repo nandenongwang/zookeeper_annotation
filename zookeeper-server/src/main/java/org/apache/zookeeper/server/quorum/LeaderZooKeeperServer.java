@@ -167,6 +167,7 @@ public class LeaderZooKeeperServer extends QuorumZooKeeperServer {
     }
 
     /**
+     * 接收learner请求进行处理
      * Requests coming from the learner should go directly to
      * PrepRequestProcessor
      *

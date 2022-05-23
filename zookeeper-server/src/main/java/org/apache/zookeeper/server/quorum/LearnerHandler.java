@@ -1,21 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server.quorum;
 
 import org.apache.jute.BinaryInputArchive;
@@ -45,6 +27,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 
 /**
+ * leader处理每个learner集群内部通讯连接
  * There will be an instance of this class created by the Leader for each
  * learner. All communication with a learner is handled by this
  * class.
@@ -219,14 +202,26 @@ public class LearnerHandler extends ZooKeeperThread {
 
     }
 
+    //region 输入输出
+    /**
+     * 连接输入接口
+     */
     private BinaryInputArchive ia;
 
+    /**
+     * 连接输出接口
+     */
     private BinaryOutputArchive oa;
 
+    /**
+     * 输入流
+     */
     private final BufferedInputStream bufferedInput;
-    private BufferedOutputStream bufferedOutput;
 
-    protected final MessageTracker messageTracker;
+    /**
+     * 输出流
+     */
+    private BufferedOutputStream bufferedOutput;
 
     // for test only
     protected void setOutputArchive(BinaryOutputArchive oa) {
@@ -236,6 +231,10 @@ public class LearnerHandler extends ZooKeeperThread {
     protected void setBufferedOutput(BufferedOutputStream bufferedOutput) {
         this.bufferedOutput = bufferedOutput;
     }
+
+    //endregion
+
+    protected final MessageTracker messageTracker;
 
     /**
      * Keep track of whether we have started send packets thread
@@ -312,10 +311,9 @@ public class LearnerHandler extends ZooKeeperThread {
     }
 
     /**
+     * 将待发送队列中的消息序列化并写出
      * This method will use the thread to send packets added to the
      * queuedPackets list
-     *
-     * @throws InterruptedException
      */
     private void sendPackets() throws InterruptedException {
         while (true) {
@@ -371,6 +369,9 @@ public class LearnerHandler extends ZooKeeperThread {
         }
     }
 
+    /**
+     * 获取类型名
+     */
     public static String packetToString(QuorumPacket p) {
         String type;
         String mess = null;
@@ -549,6 +550,7 @@ public class LearnerHandler extends ZooKeeperThread {
 
             peerLastZxid = ss.getLastZxid();
 
+            //是否需要快照
             // Take any necessary action if we need to send TRUNC or DIFF
             // startForwarding() will be called in all cases
             boolean needSnap = syncFollower(peerLastZxid, learnerMaster);
@@ -672,6 +674,7 @@ public class LearnerHandler extends ZooKeeperThread {
                 int type;
 
                 switch (qp.getType()) {
+                    //region follower向leader确认提案zxid已存储
                     case Leader.ACK:
                         if (this.learnerType == LearnerType.OBSERVER) {
                             LOG.debug("Received ACK from Observer {}", this.sid);
@@ -679,6 +682,9 @@ public class LearnerHandler extends ZooKeeperThread {
                         syncLimitCheck.updateAck(qp.getZxid());
                         learnerMaster.processAck(this.sid, qp.getZxid(), sock.getLocalSocketAddress());
                         break;
+                    //endregion
+
+                    //region learner回复leader Ping请求
                     case Leader.PING:
                         // Process the touches
                         ByteArrayInputStream bis = new ByteArrayInputStream(qp.getData());
@@ -689,11 +695,17 @@ public class LearnerHandler extends ZooKeeperThread {
                             learnerMaster.touch(sess, to);
                         }
                         break;
+                    //endregion
+
+                    //region 校验客户端sessionId
                     case Leader.REVALIDATE:
                         ServerMetrics.getMetrics().REVALIDATE_COUNT.add(1);
                         learnerMaster.revalidateSession(qp, this);
                         break;
-                    case Leader.REQUEST:
+                    //endregion
+
+                    //region follower向leader转发的事务请求、提交到leader处理链进行处理
+                    case Leader.REQUEST: {
                         bb = ByteBuffer.wrap(qp.getData());
                         sessionId = bb.getLong();
                         cxid = bb.getInt();
@@ -709,9 +721,14 @@ public class LearnerHandler extends ZooKeeperThread {
                         learnerMaster.submitLearnerRequest(si);
                         requestsReceived.incrementAndGet();
                         break;
+                    }
+                    //endregion
+
+                    //region 其他
                     default:
                         LOG.warn("unexpected quorum packet, type: {}", packetToString(qp));
                         break;
+                    //endregion
                 }
             }
         } catch (IOException e) {
@@ -775,7 +792,7 @@ public class LearnerHandler extends ZooKeeperThread {
      * @param learnerMaster
      * @return true if snapshot transfer is needed.
      */
-    boolean syncFollower(long peerLastZxid/* learner最后日志ID */, LearnerMaster learnerMaster) {
+    boolean/* 是否需要传输快照 */ syncFollower(long peerLastZxid/* learner最后日志ID */, LearnerMaster learnerMaster/* leader */) {
         /*
          * When leader election is completed, the leader will set its
          * lastProcessedZxid to be (epoch < 32). There will be no txn associated
@@ -1060,6 +1077,7 @@ public class LearnerHandler extends ZooKeeperThread {
     }
 
     /**
+     * 给连接方发送ping消息
      * ping calls from the learnerMaster to the peers
      */
     public void ping() {
@@ -1090,6 +1108,9 @@ public class LearnerHandler extends ZooKeeperThread {
         queuePacket(packet);
     }
 
+    /**
+     * 发送消息
+     */
     void queuePacket(QuorumPacket p) {
         queuedPackets.add(p);
         // Add a MarkerQuorumPacket at regular intervals.

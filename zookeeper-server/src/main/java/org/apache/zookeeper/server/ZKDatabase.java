@@ -54,7 +54,8 @@ public class ZKDatabase {
     protected DataTree dataTree;
     protected ConcurrentHashMap<Long, Integer> sessionsWithTimeouts;
     protected FileTxnSnapLog snapLog;
-    protected long minCommittedLog, maxCommittedLog;
+    protected long minCommittedLog;
+    protected long maxCommittedLog;
 
     /**
      * Default value is to use snapshot if txnlog size exceeds 1/3 the size of snapshot

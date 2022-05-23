@@ -93,6 +93,7 @@ public class FilePadding {
      */
     // VisibleForTesting
     public static long calculateFileSizeWithPadding(long position, long fileSize, long preAllocSize) {
+        //剩余空间不足4K时返回新的
         // If preAllocSize is positive and we are within 4KB of the known end of the file calculate a new file size
         if (preAllocSize > 0 && position + 4096 >= fileSize) {
             // If we have written more than we have previously preallocated we need to make sure the new

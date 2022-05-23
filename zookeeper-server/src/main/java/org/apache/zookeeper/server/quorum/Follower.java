@@ -166,13 +166,14 @@ public class Follower extends Learner {
         switch (qp.getType()) {
 
             //region PING 【探活并获取该learner客户端连接信息】
-            case Leader.PING:
+            case Leader.PING: {
                 ping(qp);
                 break;
+            }
             //endregion
 
             //region 同步提案 【记录提案日志】
-            case Leader.PROPOSAL:
+            case Leader.PROPOSAL: {
                 ServerMetrics.getMetrics().LEARNER_PROPOSAL_RECEIVED_COUNT.add(1);
                 TxnLogEntry logEntry = SerializeUtils.deserializeTxn(qp.getData());
                 TxnHeader hdr = logEntry.getHeader();
@@ -211,10 +212,11 @@ public class Follower extends Learner {
                     ServerMetrics.getMetrics().OM_PROPOSAL_PROCESS_TIME.add(Time.currentElapsedTime() - startTime);
                 }
                 break;
+            }
             //endregion
 
             //region 提交提案 【提案已复制到多数节点、可以提交应用】
-            case Leader.COMMIT:
+            case Leader.COMMIT: {
                 ServerMetrics.getMetrics().LEARNER_COMMIT_RECEIVED_COUNT.add(1);
                 fzk.commit(qp.getZxid());
                 if (om != null) {
@@ -223,8 +225,10 @@ public class Follower extends Learner {
                     ServerMetrics.getMetrics().OM_COMMIT_PROCESS_TIME.add(Time.currentElapsedTime() - startTime);
                 }
                 break;
+            }
             //endregion
 
+            //region
             case Leader.COMMITANDACTIVATE:
                 // get the new configuration from the request
                 Request request = fzk.pendingTxns.element();
@@ -260,6 +264,7 @@ public class Follower extends Learner {
             default:
                 LOG.warn("Unknown packet type: {}", LearnerHandler.packetToString(qp));
                 break;
+            //endregion
         }
     }
 
