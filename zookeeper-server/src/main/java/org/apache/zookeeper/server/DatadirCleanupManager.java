@@ -1,29 +1,12 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.TimeUnit;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * This class manages the cleanup of snapshots and corresponding transaction
@@ -47,28 +30,39 @@ public class DatadirCleanupManager {
 
     private PurgeTaskStatus purgeTaskStatus = PurgeTaskStatus.NOT_STARTED;
 
+    /**
+     * 快照文件目录
+     */
     private final File snapDir;
 
+    /**
+     * 数据文件目录
+     */
     private final File dataLogDir;
 
+    /**
+     * 保留快照数
+     */
     private final int snapRetainCount;
 
+    /**
+     * 任务调度间隔
+     */
     private final int purgeInterval;
 
+    /**
+     * 任务调度Timer
+     */
     private Timer timer;
 
     /**
      * Constructor of DatadirCleanupManager. It takes the parameters to schedule
      * the purge task.
      *
-     * @param snapDir
-     *            snapshot directory
-     * @param dataLogDir
-     *            transaction log directory
-     * @param snapRetainCount
-     *            number of snapshots to be retained after purge
-     * @param purgeInterval
-     *            purge interval in hours
+     * @param snapDir         snapshot directory
+     * @param dataLogDir      transaction log directory
+     * @param snapRetainCount number of snapshots to be retained after purge
+     * @param purgeInterval   purge interval in hours
      */
     public DatadirCleanupManager(File snapDir, File dataLogDir, int snapRetainCount, int purgeInterval) {
         this.snapDir = snapDir;
@@ -124,9 +118,9 @@ public class DatadirCleanupManager {
 
     static class PurgeTask extends TimerTask {
 
-        private File logsDir;
-        private File snapsDir;
-        private int snapRetainCount;
+        private final File logsDir;
+        private final File snapsDir;
+        private final int snapRetainCount;
 
         public PurgeTask(File dataDir, File snapDir, int count) {
             logsDir = dataDir;
@@ -138,6 +132,7 @@ public class DatadirCleanupManager {
         public void run() {
             LOG.info("Purge task started.");
             try {
+                //执行清理
                 PurgeTxnLog.purge(logsDir, snapsDir, snapRetainCount);
             } catch (Exception e) {
                 LOG.error("Error occurred while purging.", e);

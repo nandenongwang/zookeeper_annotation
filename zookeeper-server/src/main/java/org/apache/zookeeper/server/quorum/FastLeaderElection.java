@@ -730,6 +730,7 @@ public class FastLeaderElection implements Election {
     }
 
     /**
+     * 发送当前选票给其他议员
      * Send notifications to all peers upon a change in our vote
      */
     private void sendNotifications() {
@@ -760,7 +761,7 @@ public class FastLeaderElection implements Election {
     }
 
     /**
-     * 判断是否需要更新当前节点选票 【比较新旧选票的节点任期、日志号、serverId】
+     * 选票PK 【比较新旧选票的节点任期、日志号、serverId】
      * Check if a pair (server id, zxid) succeeds our
      * current vote.
      */
@@ -963,7 +964,7 @@ public class FastLeaderElection implements Election {
 
         self.start_fle = Time.currentElapsedTime();
         try {
-            /*
+            /* 票箱
              * The votes from the current leader election are stored in recvset. In other words, a vote v is in recvset
              * if v.electionEpoch == logicalclock. The current participant uses recvset to deduce on whether a majority
              * of participants has voted for it.
@@ -981,7 +982,7 @@ public class FastLeaderElection implements Election {
 
             int notTimeout = minNotificationInterval;
 
-            //region 设置首次给自己投票
+            //region 首张选票投给自己
             synchronized (this) {
                 logicalclock.incrementAndGet();
                 updateProposal(getInitId()/* 本节点serverId */, getInitLastLoggedZxid()/* 本节点最大日志ID */, getPeerEpoch()/* 本节点节点任期、初始-1或上次退出时持久化任期*/);

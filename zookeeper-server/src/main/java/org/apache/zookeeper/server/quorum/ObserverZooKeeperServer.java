@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.BiConsumer;
 
 /**
- * observer server
+ * 记录员工作流
  * A ZooKeeperServer for the Observer node type. Not much is different, but
  * we anticipate specializing the request processors in the future.
  */
@@ -27,7 +27,8 @@ public class ObserverZooKeeperServer extends LearnerZooKeeperServer {
 
     /*
      * Pending sync requests
-     */ ConcurrentLinkedQueue<Request> pendingSyncs = new ConcurrentLinkedQueue<>();
+     */
+    ConcurrentLinkedQueue<Request> pendingSyncs = new ConcurrentLinkedQueue<>();
 
     ObserverZooKeeperServer(FileTxnSnapLog logFactory, QuorumPeer self, ZKDatabase zkDb) throws IOException {
         super(logFactory, self.tickTime, self.minSessionTimeout, self.maxSessionTimeout, self.clientPortListenBacklog, zkDb, self);

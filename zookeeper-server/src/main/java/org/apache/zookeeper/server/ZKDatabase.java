@@ -48,13 +48,22 @@ public class ZKDatabase {
     private static final Logger LOG = LoggerFactory.getLogger(ZKDatabase.class);
 
     /**
+     * 内存数据树
      * make sure on a clear you take care of
      * all these members.
      */
     protected DataTree dataTree;
     protected ConcurrentHashMap<Long, Integer> sessionsWithTimeouts;
     protected FileTxnSnapLog snapLog;
+
+    /**
+     *
+     */
     protected long minCommittedLog;
+
+    /**
+     *
+     */
     protected long maxCommittedLog;
 
     /**
@@ -64,9 +73,11 @@ public class ZKDatabase {
     public static final double DEFAULT_SNAPSHOT_SIZE_FACTOR = 0.33;
     private double snapshotSizeFactor;
 
+    //region 已完成提案缓存配置
     public static final String COMMIT_LOG_COUNT = "zookeeper.commitLogCount";
     public static final int DEFAULT_COMMIT_LOG_COUNT = 500;
     public int commitLogCount;
+    //endregion
 
     /**
      * 提案缓存、用于数据同步
@@ -89,10 +100,14 @@ public class ZKDatabase {
      * @param snapLog the FileTxnSnapLog mapping this zkdatabase
      */
     public ZKDatabase(FileTxnSnapLog snapLog) {
-        dataTree = createDataTree();
-        sessionsWithTimeouts = new ConcurrentHashMap<Long, Integer>();
-        this.snapLog = snapLog;
 
+        //region 创建数据树组件、创建session超时Map、设置数据存储组件
+        dataTree = createDataTree();
+        sessionsWithTimeouts = new ConcurrentHashMap<>();
+        this.snapLog = snapLog;
+        //endregion
+
+        //region 读取配置-snapshotSizeFactor【默认0.33】
         try {
             snapshotSizeFactor = Double.parseDouble(
                     System.getProperty(SNAPSHOT_SIZE_FACTOR,
@@ -111,9 +126,10 @@ public class ZKDatabase {
                     DEFAULT_SNAPSHOT_SIZE_FACTOR);
             snapshotSizeFactor = DEFAULT_SNAPSHOT_SIZE_FACTOR;
         }
-
         LOG.info("{} = {}", SNAPSHOT_SIZE_FACTOR, snapshotSizeFactor);
+        //endregion
 
+        //region 读取配置-commitLogCount 【默认500】
         try {
             commitLogCount = Integer.parseInt(
                     System.getProperty(COMMIT_LOG_COUNT,
@@ -133,6 +149,7 @@ public class ZKDatabase {
             commitLogCount = DEFAULT_COMMIT_LOG_COUNT;
         }
         LOG.info("{}={}", COMMIT_LOG_COUNT, commitLogCount);
+        //endregion
     }
 
     /**

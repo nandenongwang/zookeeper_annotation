@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 /**
- * leader server
+ * 议长工作流
  * Just like the standard ZooKeeperServer. We just replace the request
  * processors: PrepRequestProcessor -&gt; ProposalRequestProcessor -&gt;
  * CommitProcessor -&gt; Leader.ToBeAppliedRequestProcessor -&gt;

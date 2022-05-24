@@ -173,7 +173,7 @@ public class QuorumPeerMain {
             ProviderRegistry.initialize();
             //endregion
 
-            //region 创建客户端连接攻城
+            //region 创建客户端连接工厂
             ServerCnxnFactory cnxnFactory = null;
             ServerCnxnFactory secureCnxnFactory = null;
 

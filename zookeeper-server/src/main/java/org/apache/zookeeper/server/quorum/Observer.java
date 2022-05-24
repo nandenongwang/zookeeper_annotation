@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
- * observer服务控制器
+ * 记录员服务窗口
  * Observers are peers that do not take part in the atomic broadcast protocol.
  * Instead, they are informed of successful proposals by the Leader. Observers
  * therefore naturally act as a relay point for publishing the proposal stream

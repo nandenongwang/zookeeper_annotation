@@ -104,16 +104,15 @@ public class FileTxnSnapLog {
     public FileTxnSnapLog(File dataDir, File snapDir) throws IOException {
         LOG.debug("Opening datadir:{} snapDir:{}", dataDir, snapDir);
 
+        //数据与快照均会放在配置目录【/version-2】子目录中
         this.dataDir = new File(dataDir, version + VERSION);
         this.snapDir = new File(snapDir, version + VERSION);
 
+        //region 检验配置目录、日志与快照 【是否存在、是否可写等】
         // by default create snap/log dirs, but otherwise complain instead
         // See ZOOKEEPER-1161 for more details
         boolean enableAutocreate = Boolean.parseBoolean(
                 System.getProperty(ZOOKEEPER_DATADIR_AUTOCREATE, ZOOKEEPER_DATADIR_AUTOCREATE_DEFAULT));
-
-        trustEmptySnapshot = Boolean.getBoolean(ZOOKEEPER_SNAPSHOT_TRUST_EMPTY);
-        LOG.info("{} : {}", ZOOKEEPER_SNAPSHOT_TRUST_EMPTY, trustEmptySnapshot);
 
         if (!this.dataDir.exists()) {
             if (!enableAutocreate) {
@@ -150,19 +149,26 @@ public class FileTxnSnapLog {
         if (!this.snapDir.canWrite()) {
             throw new DatadirException("Cannot write to snap directory " + this.snapDir);
         }
+        //endregion
 
+        //region 若日志与快照配置了不同存储目录、校验目录下是否存在对方类型文件
         // check content of transaction log and snapshot dirs if they are two different directories
         // See ZOOKEEPER-2967 for more details
         if (!this.dataDir.getPath().equals(this.snapDir.getPath())) {
             checkLogDir();
             checkSnapDir();
         }
+        //endregion
 
+        trustEmptySnapshot = Boolean.getBoolean(ZOOKEEPER_SNAPSHOT_TRUST_EMPTY);
+        LOG.info("{} : {}", ZOOKEEPER_SNAPSHOT_TRUST_EMPTY, trustEmptySnapshot);
+
+        autoCreateDB = Boolean.parseBoolean(System.getProperty(ZOOKEEPER_DB_AUTOCREATE, ZOOKEEPER_DB_AUTOCREATE_DEFAULT));
+        LOG.info("{} : {}", ZOOKEEPER_DB_AUTOCREATE, autoCreateDB);
+
+        //配置日志和快照管理组件
         txnLog = new FileTxnLog(this.dataDir);
         snapLog = new FileSnap(this.snapDir);
-
-        autoCreateDB = Boolean.parseBoolean(
-                System.getProperty(ZOOKEEPER_DB_AUTOCREATE, ZOOKEEPER_DB_AUTOCREATE_DEFAULT));
     }
 
     public void setServerStats(ServerStats serverStats) {
