@@ -36,6 +36,9 @@ public class QuorumMaj implements QuorumVerifier {
      */
     private Map<Long, QuorumServer> observingMembers = new HashMap<>();
 
+    /**
+     * 版本号 【reconfig会变更】
+     */
     private long version = 0;
 
     /**

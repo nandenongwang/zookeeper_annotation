@@ -504,9 +504,12 @@ public class Leader extends LearnerMaster {
             closeSockets();
         }
 
+        /**
+         * 接受其他角色议员连接、并新建处理线程处理
+         */
         class LearnerCnxAcceptorHandler implements Runnable {
-            private ServerSocket serverSocket;
-            private CountDownLatch latch;
+            private final ServerSocket serverSocket;
+            private final CountDownLatch latch;
 
             LearnerCnxAcceptorHandler(ServerSocket serverSocket, CountDownLatch latch) {
                 this.serverSocket = serverSocket;

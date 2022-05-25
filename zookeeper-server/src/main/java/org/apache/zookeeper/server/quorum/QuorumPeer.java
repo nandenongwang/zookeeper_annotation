@@ -113,6 +113,9 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
 
     private JvmPauseMonitor jvmPauseMonitor;
 
+    /**
+     * 地址组 【选举、内部通信、外部通信】
+     */
     public static final class AddressTuple {
 
         public final MultipleAddresses quorumAddr;
@@ -905,6 +908,9 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
 
     DatagramSocket udpSocket;
 
+    /**
+     * 本节点地址组
+     */
     private final AtomicReference<AddressTuple> myAddrs = new AtomicReference<>();
 
     /**
@@ -1310,8 +1316,30 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     protected Observer makeObserver(FileTxnSnapLog logFactory) throws IOException {
         return new Observer(this, new ObserverZooKeeperServer(logFactory, this, this.zkDb));
     }
-    //endregion
 
+    protected synchronized void setLeader(Leader newLeader) {
+        leader = newLeader;
+    }
+
+    protected synchronized void setFollower(Follower newFollower) {
+        follower = newFollower;
+    }
+
+    protected synchronized void setObserver(Observer newObserver) {
+        observer = newObserver;
+    }
+
+    public synchronized ZooKeeperServer getActiveServer() {
+        if (leader != null) {
+            return leader.zk;
+        } else if (follower != null) {
+            return follower.zk;
+        } else if (observer != null) {
+            return observer.zk;
+        }
+        return null;
+    }
+    //endregion
 
     /**
      * 根据算法类型创建选举算法
@@ -1358,29 +1386,9 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         return electionAlg;
     }
 
-    protected synchronized void setLeader(Leader newLeader) {
-        leader = newLeader;
-    }
-
-    protected synchronized void setFollower(Follower newFollower) {
-        follower = newFollower;
-    }
-
-    protected synchronized void setObserver(Observer newObserver) {
-        observer = newObserver;
-    }
-
-    public synchronized ZooKeeperServer getActiveServer() {
-        if (leader != null) {
-            return leader.zk;
-        } else if (follower != null) {
-            return follower.zk;
-        } else if (observer != null) {
-            return observer.zk;
-        }
-        return null;
-    }
-
+    /**
+     * 关闭选举标识
+     */
     boolean shuttingDownLE = false;
 
     @Override
@@ -2365,7 +2373,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
             }
         }
 
-        Set<Long> leavingMembers = new HashSet<Long>(jmxRemotePeerBean.keySet());
+        Set<Long> leavingMembers = new HashSet<>(jmxRemotePeerBean.keySet());
         leavingMembers.removeAll(newMembers.keySet());
         for (Long id : leavingMembers) {
             RemotePeerBean rBean = jmxRemotePeerBean.remove(id);

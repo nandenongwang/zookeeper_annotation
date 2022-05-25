@@ -27,7 +27,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 
 /**
- * leader处理每个learner集群内部通讯连接
+ * 议长处理其他议员请求处理线程
  * There will be an instance of this class created by the Leader for each
  * learner. All communication with a learner is handled by this
  * class.
@@ -173,7 +173,7 @@ public class LearnerHandler extends ZooKeeperThread {
 
     }
 
-    private SyncLimitCheck syncLimitCheck = new SyncLimitCheck();
+    private final SyncLimitCheck syncLimitCheck = new SyncLimitCheck();
 
     private static class MarkerQuorumPacket extends QuorumPacket {
 

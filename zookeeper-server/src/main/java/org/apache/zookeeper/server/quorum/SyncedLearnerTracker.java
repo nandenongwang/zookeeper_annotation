@@ -52,9 +52,19 @@ public class SyncedLearnerTracker {
         return sb.substring(0, sb.length() - 1);
     }
 
+    /**
+     * 每个配置版本的计票对
+     */
     public static class QuorumVerifierAcksetPair {
 
+        /**
+         * 计票器
+         */
         private final QuorumVerifier qv;
+
+        /**
+         * 该版本
+         */
         private final HashSet<Long> ackset;
 
         public QuorumVerifierAcksetPair(QuorumVerifier qv, HashSet<Long> ackset) {
