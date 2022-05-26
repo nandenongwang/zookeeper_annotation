@@ -299,6 +299,9 @@ class ZKWatchManager implements ClientWatchManager {
         }
     }
 
+    /**
+     * 移除不同类型watcher集合中指定path的watcher 【为指定watcher是移除path下所有watcher】
+     */
     protected boolean removeWatches(Map<String, Set<Watcher>> pathVsWatcher, Watcher watcher, String path, boolean local, int rc, Set<Watcher> removedWatchers) throws KeeperException {
         if (!local && rc != KeeperException.Code.OK.intValue()) {
             throw KeeperException.create(KeeperException.Code.get(rc), path);

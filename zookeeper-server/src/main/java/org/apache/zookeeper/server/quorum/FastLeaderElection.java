@@ -989,7 +989,8 @@ public class FastLeaderElection implements Election {
 
         self.start_fle = Time.currentElapsedTime();
         try {
-            /* 票箱
+            /*
+             * 当前选举票箱
              * The votes from the current leader election are stored in recvset. In other words, a vote v is in recvset
              * if v.electionEpoch == logicalclock. The current participant uses recvset to deduce on whether a majority
              * of participants has voted for it.
@@ -997,6 +998,7 @@ public class FastLeaderElection implements Election {
             Map<Long, Vote> recvset = new HashMap<>();
 
             /*
+             * 已建立集群票箱
              * The votes from previous leader elections, as well as the votes from the current leader election are
              * stored in outofelection. Note that notifications in a LOOKING state are not stored in outofelection.
              * Only FOLLOWING or LEADING notifications are stored in outofelection. The current participant could use
@@ -1258,6 +1260,8 @@ public class FastLeaderElection implements Election {
      * 接收到已确认角色议员选票、是否认同该议长 【普通议员】
      */
     private Vote receivedFollowingNotification(Map<Long, Vote> recvset, Map<Long, Vote> outofelection, SyncedLearnerTracker voteSet, Notification n) {
+
+        //region 判断当前集群票箱leader是否获得足够选票
         /*
          * Consider all notifications from the same epoch
          * together.
@@ -1272,7 +1276,9 @@ public class FastLeaderElection implements Election {
                 return endVote;
             }
         }
+        //endregion
 
+        //region 判断已建立集群票箱是否leader是否已获得足够选票
         /*
          * Before joining an established ensemble, verify that
          * a majority are following the same leader.
@@ -1292,6 +1298,7 @@ public class FastLeaderElection implements Election {
             leaveInstance(endVote);
             return endVote;
         }
+        //endregion
 
         return null;
     }
@@ -1300,6 +1307,7 @@ public class FastLeaderElection implements Election {
      * 接收到已确认角色议员选票、是否认同该议长 【议长】
      */
     private Vote receivedLeadingNotification(Map<Long, Vote> recvset, Map<Long, Vote> outofelection, SyncedLearnerTracker voteSet, Notification n) {
+        //region 多数议员或选民已投票给该议长、跟随
         /*
          *
          * In a two-node configuration, a recovery nodes cannot locate a leader because of the lack of the majority in the voteset.
@@ -1307,7 +1315,14 @@ public class FastLeaderElection implements Election {
          *
          * */
         Vote result = receivedFollowingNotification(recvset, outofelection, voteSet, n);
-        if (result == null) {
+        if (result != null) {
+            return result;
+        }
+        //endregion
+
+        //region 未确认该议长是否获得足够选票
+        else {
+            //region 使用Oracle验证器确定选票不足情况
             /*
              * Ask Oracle to see if it is okay to follow this leader.
              *
@@ -1319,13 +1334,15 @@ public class FastLeaderElection implements Election {
                 Vote endVote = new Vote(n.leader, n.zxid, n.electionEpoch, n.peerEpoch);
                 leaveInstance(endVote);
                 return endVote;
-            } else {
+            }
+            //endregion
+            else {
+                //默认拒绝跟随该议长
                 LOG.info("Oracle indicates not to follow");
                 return null;
             }
-        } else {
-            return result;
         }
+        //endregion
     }
 
     /**

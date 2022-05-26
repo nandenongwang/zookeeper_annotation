@@ -137,6 +137,9 @@ public interface Watcher {
          */
         @InterfaceAudience.Public
         enum EventType {
+            /**
+             * 无类型、session建立、关闭、认证失败等、一般通知默认Watcher
+             */
             None(-1),
 
             /**
@@ -230,7 +233,7 @@ public interface Watcher {
         Data(2),
 
         /**
-         * 其他
+         * 任何类型
          */
         Any(3);
 

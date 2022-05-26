@@ -457,7 +457,7 @@ public class Leader extends LearnerMaster {
     protected final Proposal newLeaderProposal = new Proposal();
 
     /**
-     * 接收follower、observer连接、创建对应处理器
+     * 接收follower、observer连接线程、创建对应处理器
      */
     class LearnerCnxAcceptor extends ZooKeeperCriticalThread {
 
@@ -607,6 +607,8 @@ public class Leader extends LearnerMaster {
      * @throws InterruptedException
      */
     void lead() throws IOException, InterruptedException {
+
+        //region 计算选举花费时间
         self.end_fle = Time.currentElapsedTime();
         long electionTimeTaken = self.end_fle - self.start_fle;
         self.setElectionTimeTaken(electionTimeTaken);
@@ -614,8 +616,11 @@ public class Leader extends LearnerMaster {
         LOG.info("LEADING - LEADER ELECTION TOOK - {} {}", electionTimeTaken, QuorumPeer.FLE_TIME_UNIT);
         self.start_fle = 0;
         self.end_fle = 0;
+        //endregion
 
+        //region 注册 Leader MBean
         zk.registerJMX(new LeaderBean(this, zk), self.jmxLocalPeerBean);
+        //endregion
 
         try {
             self.setZabState(QuorumPeer.ZabState.DISCOVERY);
@@ -624,10 +629,12 @@ public class Leader extends LearnerMaster {
 
             leaderStateSummary = new StateSummary(self.getCurrentEpoch(), zk.getLastProcessedZxid());
 
+            //region 开启议员间连接监听
             // Start thread that waits for connection requests from
             // new followers.
             cnxAcceptor = new LearnerCnxAcceptor();
             cnxAcceptor.start();
+            //endregion
 
             long epoch = getEpochToPropose(self.getId(), self.getAcceptedEpoch());
 
@@ -695,7 +702,7 @@ public class Leader extends LearnerMaster {
                 shutdown("Waiting for a quorum of followers, only synced with sids: [ "
                         + newLeaderProposal.ackSetsToString()
                         + " ]");
-                HashSet<Long> followerSet = new HashSet<Long>();
+                HashSet<Long> followerSet = new HashSet<>();
 
                 for (LearnerHandler f : getLearners()) {
                     if (self.getQuorumVerifier().getVotingMembers().containsKey(f.getSid())) {

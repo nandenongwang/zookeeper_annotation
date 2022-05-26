@@ -1695,7 +1695,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
      */
     @Override
     public String[] getQuorumPeers() {
-        List<String> l = new ArrayList<String>();
+        List<String> l = new ArrayList<>();
         synchronized (this) {
             if (leader != null) {
                 for (LearnerHandler fh : leader.getLearners()) {

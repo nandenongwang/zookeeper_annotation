@@ -53,16 +53,24 @@ public class ZKDatabase {
      * all these members.
      */
     protected DataTree dataTree;
-    protected ConcurrentHashMap<Long, Integer> sessionsWithTimeouts;
+
+    /**
+     * 记录客户端session超时时间
+     */
+    protected ConcurrentHashMap<Long/* sessionId */, Integer/* 超时时间 */> sessionsWithTimeouts;
+
+    /**
+     * 持久化存储
+     */
     protected FileTxnSnapLog snapLog;
 
     /**
-     *
+     * 缓存的最小提交日志ID
      */
     protected long minCommittedLog;
 
     /**
-     *
+     * 缓存的最大提交日志ID
      */
     protected long maxCommittedLog;
 
@@ -288,6 +296,7 @@ public class ZKDatabase {
     };
 
     /**
+     * 重载持久化存储数据 【从日志与快照中重载相关状态与内存数据树】
      * load the database from the disk onto memory and also add
      * the transactions to the committedlog in memory.
      *

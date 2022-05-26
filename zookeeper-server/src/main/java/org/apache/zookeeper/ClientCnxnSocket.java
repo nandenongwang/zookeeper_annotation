@@ -69,7 +69,14 @@ abstract class ClientCnxnSocket {
     protected long lastHeard;
     protected long lastSend;
     protected long now;
+    /**
+     * 发送线程
+     */
     protected ClientCnxn.SendThread sendThread;
+
+    /**
+     * 发送缓冲
+     */
     protected LinkedBlockingDeque<Packet> outgoingQueue;
     protected ZKClientConfig clientConfig;
     private int packetLen = ZKClientConfig.CLIENT_MAX_PACKET_LENGTH_DEFAULT;
@@ -119,6 +126,9 @@ abstract class ClientCnxnSocket {
         this.lastHeard = now;
     }
 
+    /**
+     * 分配读取内容buffer
+     */
     void readLength() throws IOException {
         int len = incomingBuffer.getInt();
         if (len < 0 || len > packetLen) {
@@ -127,6 +137,9 @@ abstract class ClientCnxnSocket {
         incomingBuffer = ByteBuffer.allocate(len);
     }
 
+    /**
+     * 读取sessionId、sessionPwd完成会话建立并发送事件通知默认监听器
+     */
     void readConnectResult() throws IOException {
         if (LOG.isTraceEnabled()) {
             StringBuilder buf = new StringBuilder("0x[");

@@ -90,12 +90,13 @@ public class ClientCnxn {
     private final CopyOnWriteArraySet<AuthData> authInfo = new CopyOnWriteArraySet<>();
 
     /**
-     * 挂起future包
+     * 挂起future请求 【发送等待响应】
      * These are the packets that have been sent and are waiting for a response.
      */
     private final Queue<Packet> pendingQueue = new ArrayDeque<>();
 
     /**
+     * 发送缓冲 【等待发送】
      * These are the packets that need to be sent.
      */
     private final LinkedBlockingDeque<Packet> outgoingQueue = new LinkedBlockingDeque<>();
@@ -502,7 +503,7 @@ public class ClientCnxn {
         }
 
         /**
-         * 处理事件【封装指定事件与其监听器、入队等待处理】
+         * 处理触发事件【封装指定事件与其监听器、入队等待处理】
          */
         private void queueEvent(WatchedEvent event, Set<Watcher> materializedWatchers) {
             if (event.getType() == EventType.None && sessionState == event.getState()) {
@@ -512,6 +513,7 @@ public class ClientCnxn {
             final Set<Watcher> watchers;
             if (materializedWatchers == null) {
                 // materialize the watchers based on the event
+                //物化事件监听器 【找到对应所有监听器并移除之】
                 watchers = watchManager.materialize(event.getState(), event.getType(), event.getPath());
             } else {
                 watchers = new HashSet<>(materializedWatchers);
@@ -576,11 +578,11 @@ public class ClientCnxn {
         }
 
         /**
-         * 处理事件监听
+         * 处理事件监听 【触发事件、mutil空操作本地事件、请求回调】
          */
         private void processEvent(Object event) {
             try {
-                //region
+                //region 执行服务端触发事件
                 if (event instanceof WatcherSetEventPair) {
                     // each watcher will process the event
                     WatcherSetEventPair pair = (WatcherSetEventPair) event;
@@ -594,7 +596,7 @@ public class ClientCnxn {
                 }
                 //endregion
 
-                //region
+                //region mutil空操作时使用、回调空数据
                 else if (event instanceof LocalCallback) {
                     LocalCallback lcb = (LocalCallback) event;
                     if (lcb.cb instanceof StatCallback) {
@@ -621,7 +623,7 @@ public class ClientCnxn {
                 }
                 //endregion
 
-                //region
+                //region 处理各类异步请求回调
                 else {
                     Packet p = (Packet) event;
                     int rc = 0;
@@ -753,12 +755,19 @@ public class ClientCnxn {
 
     }
 
-    // @VisibleForTesting
+    /**
+     * 完成挂起请求
+     */
     protected void finishPacket(Packet p) {
+
+        //region 完成Watch注册 【若请求成功】
         int err = p.replyHeader.getErr();
         if (p.watchRegistration != null) {
             p.watchRegistration.register(err);
         }
+        //endregion
+
+        //region 完成Watch注销
         // Add all the removed watch events to the event queue, so that the
         // clients will be notified with 'Data/Child WatchRemoved' event type.
         if (p.watchDeregistration != null) {
@@ -780,7 +789,9 @@ public class ClientCnxn {
                 p.replyHeader.setErr(ke.code().intValue());
             }
         }
+        //endregion
 
+        //region 等待请求回调
         if (p.cb == null) {
             synchronized (p) {
                 p.finished = true;
@@ -790,6 +801,7 @@ public class ClientCnxn {
             p.finished = true;
             eventThread.queuePacket(p);
         }
+        //endregion
     }
 
     void queueEvent(String clientPath, int err, Set<Watcher> materializedWatchers, EventType eventType) {
@@ -880,6 +892,7 @@ public class ClientCnxn {
     }
 
     /**
+     * 发送线程
      * This class services the outgoing request queue and generates the heart
      * beats. It also spawns the ReadThread.
      */
@@ -891,14 +904,17 @@ public class ClientCnxn {
         private volatile ZooKeeperSaslClient zooKeeperSaslClient;
 
         /**
-         * 解析处理服务端响应
+         * 解析处理服务端消息
          */
         void readResponse(ByteBuffer incomingBuffer) throws IOException {
+            //region 解析消息头
             ByteBufferInputStream bbis = new ByteBufferInputStream(incomingBuffer);
             BinaryInputArchive bbia = BinaryInputArchive.getArchive(bbis);
             ReplyHeader replyHdr = new ReplyHeader();
-
             replyHdr.deserialize(bbia, "header");
+            //endregion
+
+            //region 响应为【PING响应|认证响应|事件通知】处理并结束
             switch (replyHdr.getXid()) {
                 //region ping响应
                 case PING_XID:
@@ -908,7 +924,7 @@ public class ClientCnxn {
                     return;
                 //endregion
 
-                //region 认证失败 【发送认证失败事件、关闭事件】
+                //region 认证 【失败则发送认证失败事件、关闭事件(关闭事件处理线程)】
                 case AUTHPACKET_XID:
                     LOG.debug("Got auth session id: 0x{}", Long.toHexString(sessionId));
                     if (replyHdr.getErr() == KeeperException.Code.AUTHFAILED.intValue()) {
@@ -947,6 +963,7 @@ public class ClientCnxn {
                 default:
                     break;
             }
+            //endregion
 
             // If SASL authentication is currently in progress, construct and
             // send a response packet immediately, rather than queuing a
@@ -957,6 +974,9 @@ public class ClientCnxn {
                 zooKeeperSaslClient.respondToServer(request.getToken(), ClientCnxn.this);
                 return;
             }
+
+            //region 响应为请求结果
+
             //region 移除挂起future
             Packet packet;
             synchronized (pendingQueue) {
@@ -996,6 +1016,7 @@ public class ClientCnxn {
                 finishPacket(packet);
             }
             //endregion
+            //endregion
         }
 
         SendThread(ClientCnxnSocket clientCnxnSocket) throws IOException {
@@ -1033,7 +1054,7 @@ public class ClientCnxn {
         }
 
         /**
-         * 发送所有监听路径、认证信息
+         * 发送启动注册包 【所有监听路径、认证信息】
          * Setup session, previous watches, authentication.
          */
         void primeConnection() throws IOException {
@@ -1130,7 +1151,7 @@ public class ClientCnxn {
         }
 
         /**
-         * 拼接根路径
+         * 将客户端路径处理成服务端路径 【拼接根路径】
          */
         private List<String> prependChroot(List<String> paths) {
             if (chrootPath != null && !paths.isEmpty()) {
@@ -1171,7 +1192,7 @@ public class ClientCnxn {
         private boolean saslLoginFailed = false;
 
         /**
-         * 启动与server连接
+         * 连接Server
          */
         private void startConnect(InetSocketAddress addr) throws IOException {
             // initializing it for new connection
@@ -1209,6 +1230,7 @@ public class ClientCnxn {
             }
             logStartConnect(addr);
 
+            //通过socket连接到server
             clientCnxnSocket.connect(addr);
         }
 
@@ -1231,7 +1253,7 @@ public class ClientCnxn {
             InetSocketAddress serverAddress = null;
             while (state.isAlive()) {
                 try {
-                    //region 创建连接
+                    //region 若没有连接则创建连接
                     if (!clientCnxnSocket.isConnected()) {
                         // don't re-establish connection if we are closing
                         if (closing) {
@@ -1251,7 +1273,7 @@ public class ClientCnxn {
                     }
                     //endregion
 
-                    //region 发送认证信息、读取超时、连接超时检测
+                    //region 读取超时、连接超时检测
                     if (state.isConnected()) {
                         // determine whether we need to send an AuthFailed event.
                         if (zooKeeperSaslClient != null) {
@@ -1332,8 +1354,9 @@ public class ClientCnxn {
                         to = Math.min(to, pingRwTimeout - idlePingRwServer);
                     }
 
-                    //处理双方通信
+                    //region 处理双方通信
                     clientCnxnSocket.doTransport(to, pendingQueue, ClientCnxn.this);
+                    //endregion
                 } catch (Throwable e) {
                     if (closing) {
                         // closing so this is expected
@@ -1389,6 +1412,9 @@ public class ClientCnxn {
             clientCnxnSocket.updateLastSendAndHeard();
         }
 
+        /**
+         * 轮询连接配置中的server地址、通过【isro】命令响应找出 rwServerAddress
+         */
         private void pingRwServer() throws RWServerFoundException {
             String result = null;
             InetSocketAddress addr = hostProvider.next(0);
@@ -1459,6 +1485,7 @@ public class ClientCnxn {
         }
 
         /**
+         * 注册完成回调 【session建立完毕】
          * Callback invoked by the ClientCnxnSocket once a connection has been
          * established.
          *
@@ -1468,11 +1495,9 @@ public class ClientCnxn {
          * @param isRO
          * @throws IOException
          */
-        void onConnected(
-                int _negotiatedSessionTimeout,
-                long _sessionId,
-                byte[] _sessionPasswd,
-                boolean isRO) throws IOException {
+        void onConnected(int _negotiatedSessionTimeout, long _sessionId, byte[] _sessionPasswd, boolean isRO) throws IOException {
+
+            //region 协商session超时失败、发送过期时间并关闭连接
             negotiatedSessionTimeout = _negotiatedSessionTimeout;
             if (negotiatedSessionTimeout <= 0) {
                 changeZkState(States.CLOSED);
@@ -1486,11 +1511,13 @@ public class ClientCnxn {
                 LOG.warn(warnInfo);
                 throw new SessionExpiredException(warnInfo);
             }
+            //endregion
 
             if (!readOnly && isRO) {
                 LOG.error("Read/write client got connected to read-only server");
             }
 
+            //region 配置连接sessionID、sessionPwd、timeout等【读取超时 = session超时 * 2/3、连接超时 = 各server平分session超时】
             readTimeout = negotiatedSessionTimeout * 2 / 3;
             connectTimeout = negotiatedSessionTimeout / hostProvider.size();
             hostProvider.onConnected();
@@ -1504,8 +1531,12 @@ public class ClientCnxn {
                     Long.toHexString(sessionId),
                     negotiatedSessionTimeout,
                     (isRO ? " (READ-ONLY mode)" : ""));
+            //endregion
+
+            //region 发送连接session事件【默认Watch、None、SyncConnected】
             KeeperState eventState = (isRO) ? KeeperState.ConnectedReadOnly : KeeperState.SyncConnected;
             eventThread.queueEvent(new WatchedEvent(Watcher.Event.EventType.None, eventState, null));
+            //endregion
         }
 
         void close() {

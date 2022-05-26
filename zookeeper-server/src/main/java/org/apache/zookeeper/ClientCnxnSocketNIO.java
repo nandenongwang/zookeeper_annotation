@@ -26,8 +26,14 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
 
     private SelectionKey sockKey;
 
+    /**
+     * 客户端地址
+     */
     private SocketAddress localSocketAddress;
 
+    /**
+     * 连接server地址
+     */
     private SocketAddress remoteSocketAddress;
 
     ClientCnxnSocketNIO(ZKClientConfig clientConfig) throws IOException {
@@ -48,20 +54,33 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         if (sock == null) {
             throw new IOException("Socket is null!");
         }
+
+        //region 处理读事件 【读取完整消息、交由发送者处理】
         if (sockKey.isReadable()) {
+            //region 读取长度或内容【incomingBuffer为lenBuffer时为读取长度、否则为内容、每轮读取完成会重置】
             int rc = sock.read(incomingBuffer);
             if (rc < 0) {
                 throw new EndOfStreamException("Unable to read additional data from server sessionid 0x"
                         + Long.toHexString(sessionId)
                         + ", likely server has closed socket");
             }
+            //endregion
+
             if (!incomingBuffer.hasRemaining()) {
                 incomingBuffer.flip();
+                //region 读取的是消息长度、分配读取内容buffer等待继续读取
                 if (incomingBuffer == lenBuffer) {
                     recvCount.getAndIncrement();
                     readLength();
-                } else if (!initialized) {
+                }
+                //endregion
+
+                //region 未初始化【读取注册包响应建立session、关注读写事件开始正常服务】
+                else if (!initialized) {
+                    //注册包响应、建立session
                     readConnectResult();
+
+                    //region 更新关注事件、初始化缓冲区等
                     enableRead();
                     if (findSendablePacket(outgoingQueue, sendThread.tunnelAuthInProgress()) != null) {
                         // Since SASL authentication has completed (if client is configured to do so),
@@ -71,22 +90,34 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                     lenBuffer.clear();
                     incomingBuffer = lenBuffer;
                     updateLastHeard();
+                    //endregion
+
                     initialized = true;
-                } else {
+                }
+                //endregion
+
+                //region 读取的是消息内容、交由发送者进行处理
+                else {
                     sendThread.readResponse(incomingBuffer);
                     lenBuffer.clear();
                     incomingBuffer = lenBuffer;
                     updateLastHeard();
                 }
+                //endregion
+
             }
         }
+        //endregion
+
+        //region 处理写事件 【从写缓冲中取出消息通过socket写出、放入挂起缓冲中】
         if (sockKey.isWritable()) {
+            //从发送缓冲中取出队头请求
             Packet p = findSendablePacket(outgoingQueue, sendThread.tunnelAuthInProgress());
 
             if (p != null) {
                 //更新最新发送时间
                 updateLastSend();
-                //设置请求ID并序列化
+                //非ping、auth请求需设置客户端xid
                 // If we already started writing p, p.bb will already exist
                 if (p.bb == null) {
                     if ((p.requestHeader != null)
@@ -135,6 +166,7 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
                 enableWrite();
             }
         }
+        //endregion
     }
 
     /**
@@ -249,8 +281,13 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
         }
     }
 
+    /**
+     * 与server创建连接
+     */
     @Override
     void connect(InetSocketAddress addr) throws IOException {
+
+        //region 创建客户端socket连接server
         SocketChannel sock = createSock();
         try {
             registerAndConnect(sock, addr);
@@ -259,6 +296,8 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
             sock.close();
             throw e;
         }
+        //endregion
+
         initialized = false;
 
         /*
@@ -343,11 +382,15 @@ public class ClientCnxnSocketNIO extends ClientCnxnSocket {
             }
             //endregion
         }
+
+        //region 如果有待发送包需注册关注写事件
         if (sendThread.getZkState().isConnected()) {
             if (findSendablePacket(outgoingQueue, sendThread.tunnelAuthInProgress()) != null) {
                 enableWrite();
             }
         }
+        //endregion
+
         selected.clear();
     }
 

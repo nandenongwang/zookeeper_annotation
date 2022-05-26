@@ -147,6 +147,10 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     private ZKDatabase zkDb;
     private ResponseCache readResponseCache;
     private ResponseCache getChildrenResponseCache;
+
+    /**
+     * 事务提案递增zxid
+     */
     private final AtomicLong hzxid = new AtomicLong(0);
     public static final Exception ok = new Exception("No prob");
     protected RequestProcessor firstProcessor;
@@ -455,6 +459,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     }
 
     /**
+     * 重载数据 【选举时已经载入过】
      * Restore sessions and data
      */
     public void loadData() throws IOException, InterruptedException {
@@ -476,17 +481,21 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
          *
          * See ZOOKEEPER-1642 for more detail.
          */
+
+        //region 使用最后应用ID设置zxid起始值
         if (zkDb.isInitialized()) {
             setZxid(zkDb.getDataTreeLastProcessedZxid());
         } else {
             setZxid(zkDb.loadDataBase());
         }
+        //endregion
 
         // Clean up dead sessions
         zkDb.getSessions().stream()
                 .filter(session -> zkDb.getSessionWithTimeOuts().get(session) == null)
                 .forEach(session -> killSession(session, zkDb.getDataTreeLastProcessedZxid()));
 
+        //立即创建快照
         // Make a clean snapshot
         takeSnapshot();
     }
