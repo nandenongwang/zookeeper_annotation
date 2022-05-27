@@ -36,6 +36,7 @@ public class SyncRequestProcessor extends ZooKeeperCriticalThread implements Req
     private static final Request REQUEST_OF_DEATH = Request.requestOfDeath;
 
     /**
+     * 拍摄快照阈值
      * The number of log entries to log before starting a snapshot
      */
     private static int snapCount = ZooKeeperServer.getSnapCount();

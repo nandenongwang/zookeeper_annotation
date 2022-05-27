@@ -1083,8 +1083,7 @@ public class DataTree {
         killSession(session, zxid, ephemerals.remove(session), null);
     }
 
-    void killSession(long session, long zxid, Set<String> paths2DeleteLocal,
-                     List<String> paths2DeleteInTxn) {
+    void killSession(long session, long zxid, Set<String> paths2DeleteLocal, List<String> paths2DeleteInTxn) {
         if (paths2DeleteInTxn != null) {
             deleteNodes(session, zxid, paths2DeleteInTxn);
         }

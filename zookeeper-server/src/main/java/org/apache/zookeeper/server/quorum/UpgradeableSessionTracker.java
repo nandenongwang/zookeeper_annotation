@@ -1,32 +1,15 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server.quorum;
 
-import java.util.Collections;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.server.SessionTracker;
 import org.apache.zookeeper.server.ZooKeeperServerListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Collections;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 /**
  * A session tracker that supports upgradeable local sessions.
@@ -35,20 +18,35 @@ public abstract class UpgradeableSessionTracker implements SessionTracker {
 
     private static final Logger LOG = LoggerFactory.getLogger(UpgradeableSessionTracker.class);
 
-    private ConcurrentMap<Long, Integer> localSessionsWithTimeouts;
-    private ConcurrentMap<Long, Integer> upgradingSessions;
+    /**
+     * 本地session
+     */
+    private ConcurrentMap<Long/* sessionId */, Integer/* timeout */> localSessionsWithTimeouts;
+
+    /**
+     * 升级全局session中的本地session
+     */
+    private ConcurrentMap<Long/* sessionId */, Integer/* timeout */> upgradingSessions;
+
+    /**
+     * 本地session管理器
+     */
     protected LocalSessionTracker localSessionTracker;
     protected boolean localSessionsEnabled;
 
     public void start() {
     }
 
+    /**
+     * 创建本地session管理 【本地session管理器、本地sessionmap、升级中sessionmap】
+     */
     public void createLocalSessionTracker(SessionExpirer expirer, int tickTime, long id, ZooKeeperServerListener listener) {
-        this.localSessionsWithTimeouts = new ConcurrentHashMap<Long, Integer>();
+        this.localSessionsWithTimeouts = new ConcurrentHashMap<>();
         this.localSessionTracker = new LocalSessionTracker(expirer, this.localSessionsWithTimeouts, tickTime, id, listener);
-        this.upgradingSessions = new ConcurrentHashMap<Long, Integer>();
+        this.upgradingSessions = new ConcurrentHashMap<>();
     }
 
+    @Override
     public boolean isTrackingSession(long sessionId) {
         return isLocalSession(sessionId) || isGlobalSession(sessionId);
     }
@@ -113,11 +111,13 @@ public abstract class UpgradeableSessionTracker implements SessionTracker {
         localSessionTracker.removeSession(sessionId);
     }
 
+    @Override
     public void checkGlobalSession(long sessionId, Object owner)
-        throws KeeperException.SessionExpiredException, KeeperException.SessionMovedException {
+            throws KeeperException.SessionExpiredException, KeeperException.SessionMovedException {
         throw new UnsupportedOperationException();
     }
 
+    @Override
     public long getLocalSessionCount() {
         if (localSessionsWithTimeouts == null) {
             return 0;
@@ -125,8 +125,9 @@ public abstract class UpgradeableSessionTracker implements SessionTracker {
         return localSessionsWithTimeouts.size();
     }
 
+    @Override
     public Set<Long> localSessions() {
         return (localSessionTracker == null) ? Collections.<Long>emptySet()
-            : localSessionTracker.localSessions();
+                : localSessionTracker.localSessions();
     }
 }

@@ -67,8 +67,14 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     // before sending the requests to the quorum.
     static final boolean enableEagerACLCheck;
 
+    /**
+     * 是否跳过ACL检查
+     */
     static final boolean skipACL;
 
+    /**
+     * 是否开启配额检查
+     */
     public static final boolean enforceQuota;
 
     public static final String SASL_SUPER_USER = "zookeeper.superUser";
@@ -381,6 +387,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         return connThrottle;
     }
 
+    /**
+     * 输出server配置
+     */
     public void dumpConf(PrintWriter pwriter) {
         pwriter.print("clientPort=");
         pwriter.println(getClientPort());
@@ -409,6 +418,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         pwriter.println(getServerId());
     }
 
+    /**
+     * 获取运行时配置
+     */
     public ZooKeeperServerConf getConf() {
         return new ZooKeeperServerConf(
                 getClientPort(),
@@ -526,6 +538,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         return txnLogFactory.shouldForceWriteInitialSnapshotAfterLeaderElection();
     }
 
+    /**
+     * 获取日志目录下所有文件大小
+     */
     @Override
     public long getDataDirSize() {
         if (zkDb == null) {
@@ -535,6 +550,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         return getDirSize(path);
     }
 
+    /**
+     * 获取快照目录下所有文件大小
+     */
     @Override
     public long getLogDirSize() {
         if (zkDb == null) {
@@ -544,6 +562,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         return getDirSize(path);
     }
 
+    /**
+     * 获取文件夹下所有文件大小
+     */
     private long getDirSize(File file) {
         long size = 0L;
         if (file.isDirectory()) {
@@ -567,6 +588,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         return sessionTracker;
     }
 
+    /**
+     * 分配下一个使用的事务日志ID
+     */
     long getNextZxid() {
         return hzxid.incrementAndGet();
     }
@@ -587,6 +611,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         // detect it!
         close(sessionId);
     }
+
 
     protected void killSession(long sessionId, long zxid) {
         zkDb.killSession(sessionId, zxid);
@@ -628,7 +653,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     }
 
     /**
-     * 检测连接是否还可用 【session被管理且未超时】
+     * 更新session连接超时时间
      */
     void touch(ServerCnxn cnxn) throws MissingSessionException {
         if (cnxn == null) {
@@ -662,6 +687,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         }
     }
 
+    /**
+     * 重载数据存储
+     */
     public void startdata() throws IOException, InterruptedException {
         //check to see if zkDb is not null
         if (zkDb == null) {
@@ -709,18 +737,27 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         notifyAll();
     }
 
+    /**
+     * 启动jvm监控
+     */
     protected void startJvmPauseMonitor() {
         if (this.jvmPauseMonitor != null) {
             this.jvmPauseMonitor.serviceStart();
         }
     }
 
+    /**
+     * 启动请求阀
+     */
     protected void startRequestThrottler() {
         requestThrottler = new RequestThrottler(this);
         requestThrottler.start();
 
     }
 
+    /**
+     * 设置处理链
+     */
     protected void setupRequestProcessors() {
         RequestProcessor finalProcessor = new FinalRequestProcessor(this);
         RequestProcessor syncProcessor = new SyncRequestProcessor(this, finalProcessor);
@@ -752,6 +789,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     }
 
     /**
+     * 设置服务端运行状态
      * Sets the state of ZooKeeper server. After changing the state, it notifies
      * the server state change to a registered shutdown handler, if any.
      * <p>
@@ -781,6 +819,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     }
 
     /**
+     * 能否关闭
      * This can be used while shutting down the server to see whether the server
      * is already shutdown or not.
      *
@@ -792,6 +831,8 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     }
 
     /**
+     * 是否处于运行状态
+     *
      * @return true if the server is running, false otherwise.
      */
     public boolean isRunning() {
@@ -922,6 +963,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
 
 
     /**
+     * 变更记录
      * This structure is used to facilitate information sharing between PrepRP
      * and FinalRP.
      */
@@ -1177,10 +1219,13 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
             }
         }
         try {
+            //将session过期时间变基到当前时间
             touch(si.cnxn);
             boolean validpacket = Request.isValid(si.type);
             if (validpacket) {
+                //设置是否为localsession 【默认不开启localsession、开启时默认true】
                 setLocalSessionFlag(si);
+                //交由处理链处理
                 firstProcessor.processRequest(si);
                 if (si.cnxn != null) {
                     incInProcess();
@@ -1202,6 +1247,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         }
     }
 
+    /**
+     * 获取拍摄快照日志条数阈值 【需达到该值才可拍摄快照】
+     */
     public static int getSnapCount() {
         int snapCount = Integer.getInteger(SNAP_COUNT, DEFAULT_SNAP_COUNT);
         // snapCount must be 2 or more. See org.apache.zookeeper.server.SyncRequestProcessor
@@ -1408,7 +1456,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         long sessionId = connReq.getSessionId();
         //endregion
 
-        //region 通过申请token对新连接session进行限流
+        //region 通过限流token对新连接session进行限流
         int tokensNeeded = 1;
         if (connThrottle.isConnectionWeightEnabled()) {
             if (sessionId == 0) {
@@ -1465,7 +1513,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         }
         //endregion
 
-        //region 设置连接超时
+        //region 协商设置连接超时【客户端设置超时应在服务端最最小最大超时范围内】
         int sessionTimeout = connReq.getTimeOut();
         int minSessionTimeout = getMinSessionTimeout();
         if (sessionTimeout < minSessionTimeout) {
@@ -1525,8 +1573,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
      * @param cnxn
      * @param sessionId
      */
-    protected void validateSession(ServerCnxn cnxn, long sessionId)
-            throws IOException {
+    protected void validateSession(ServerCnxn cnxn, long sessionId) throws IOException {
         // do nothing
     }
 
@@ -1610,22 +1657,20 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         return length > largeRequestThreshold;
     }
 
-    public boolean checkRequestSizeWhenReceivingMessage(int length) throws IOException {
+    public void checkRequestSizeWhenReceivingMessage(int length) throws IOException {
         if (!isLargeRequest(length)) {
-            return true;
+            return;
         }
-        if (currentLargeRequestBytes.get() + length <= largeRequestMaxBytes) {
-            return true;
-        } else {
+        if (currentLargeRequestBytes.get() + length > largeRequestMaxBytes) {
             ServerMetrics.getMetrics().LARGE_REQUESTS_REJECTED.add(1);
             throw new IOException("Rejecting large request");
         }
 
     }
 
-    private boolean checkRequestSizeWhenMessageReceived(int length) throws IOException {
+    private void checkRequestSizeWhenMessageReceived(int length) throws IOException {
         if (!isLargeRequest(length)) {
-            return true;
+            return;
         }
 
         int bytes = currentLargeRequestBytes.addAndGet(length);
@@ -1634,7 +1679,6 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
             ServerMetrics.getMetrics().LARGE_REQUESTS_REJECTED.add(1);
             throw new IOException("Rejecting large request");
         }
-        return true;
     }
 
     public void requestFinished(Request request) {
@@ -1671,7 +1715,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         // pointing
         // to the start of the txn
         incomingBuffer = incomingBuffer.slice();
-        //region 处理认证请求
+        //region 处理新增连接认证信息 【解析并将认证协议与参数存入连接认证信息中、如Id("ip","client ip")】
         if (h.getType() == OpCode.auth) {
             LOG.info("got auth packet {}", cnxn.getRemoteSocketAddress());
             AuthPacket authPacket = new AuthPacket();
@@ -1713,22 +1757,20 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                 cnxn.sendBuffer(ServerCnxnFactory.closeConn);
                 cnxn.disableRecv();
             }
-            return;
         }
         //endregion
 
-        //region 处理Sasl请求
+        //region 处理Sasl token请求
         else if (h.getType() == OpCode.sasl) {
             processSasl(incomingBuffer, cnxn, h);
         }
         //endregion
 
-        //region 封装其他请求并提交
+        //region 其他请求提交到请求阀中等待处理链处理
         else {
             if (!authHelper.enforceAuthentication(cnxn, h.getXid())) {
                 // Authentication enforcement is failed
                 // Already sent response to user about failure and closed the session, lets return
-                return;
             } else {
                 Request si = new Request(cnxn, cnxn.getSessionId(), h.getXid(), h.getType(), incomingBuffer, cnxn.getAuthInfo());
                 int length = incomingBuffer.limit();
@@ -1771,6 +1813,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         return Boolean.getBoolean(ALLOW_SASL_FAILED_CLIENTS);
     }
 
+    /**
+     * 通过SaslServer交换sasl认证token
+     */
     private void processSasl(ByteBuffer incomingBuffer, ServerCnxn cnxn, RequestHeader requestHeader) throws IOException {
         LOG.debug("Responding to client SASL token.");
         GetSASLRequest clientTokenRecord = new GetSASLRequest();
@@ -1842,7 +1887,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     }
 
     /**
-     * 最后处理请求
+     * 完成请求处理
      * entry point for FinalRequestProcessor.java
      */
     public ProcessTxnResult processTxn(Request request) {
@@ -1857,7 +1902,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
             return new ProcessTxnResult();
         }
         synchronized (outstandingChanges) {
-            //应用提案到内存DB中
+            //应用提案到DB存储中
             ProcessTxnResult rc = processTxnInDB(hdr, request.getTxn(), request.getTxnDigest());
 
             //region 清理变更记录
@@ -1892,6 +1937,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         }
     }
 
+    /**
+     * 完成请求处理【提交session或关闭移除session】
+     */
     private void processTxnForSessionEvents(Request request, TxnHeader hdr, Record txn) {
         int opCode = (request == null) ? hdr.getType() : request.type;
         long sessionId = (request == null) ? hdr.getClientId() : request.sessionId;
@@ -1908,8 +1956,12 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         }
     }
 
+    /**
+     * 完成请求处理【应用事务提案到状态存储中】
+     */
     private ProcessTxnResult processTxnInDB(TxnHeader hdr, Record txn, TxnDigest digest) {
         if (hdr == null) {
+            //非事务请求不用更新状态
             return new ProcessTxnResult();
         } else {
             return getZKDatabase().processTxn(hdr, txn, digest);
@@ -1948,6 +2000,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         return isResponseCachingEnabled ? getChildrenResponseCache : null;
     }
 
+    //region 注册&注销度量指标
     protected void registerMetrics() {
         MetricsContext rootContext = ServerMetrics.getMetrics().getMetricsProvider().getRootContext();
 
@@ -2042,6 +2095,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         rootContext.unregisterGaugeSet(QuotaMetricsUtils.QUOTA_COUNT_USAGE_PER_NAMESPACE);
         rootContext.unregisterGaugeSet(QuotaMetricsUtils.QUOTA_BYTES_USAGE_PER_NAMESPACE);
     }
+    //endregion
 
     /**
      * Hook into admin server, useful to expose additional data
@@ -2056,6 +2110,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     }
 
     /**
+     * 检查连接是否满足操作数据节点所需ACL权限
      * Grant or deny authorization to an operation on a node as a function of:
      *
      * @param cnxn    :    the server connection
@@ -2066,30 +2121,43 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
      * @param setAcls : for set ACL operations, the list of ACLs being set. Otherwise null.
      */
     public void checkACL(ServerCnxn cnxn, List<ACL> acl, int perm, List<Id> ids, String path, List<ACL> setAcls) throws KeeperException.NoAuthException {
+        //region 关闭ACL控制。通过
         if (skipACL) {
             return;
         }
+        //endregion
 
         LOG.debug("Permission requested: {} ", perm);
         LOG.debug("ACLs for node: {}", acl);
         LOG.debug("Client credentials: {}", ids);
 
+        //region 节点未设置ACL访问权限、通过
         if (acl == null || acl.size() == 0) {
             return;
         }
+        //endregion
+
+        //region 该客户端存在管理员凭证、通过
         for (Id authId : ids) {
             if (authId.getScheme().equals("super")) {
                 return;
             }
         }
+        //endregion
+
         for (ACL a : acl) {
             Id id = a.getId();
             if ((a.getPerms() & perm) != 0) {
+                //region 该权限认证方式为world:anyone、通过
                 if (id.getScheme().equals("world") && id.getId().equals("anyone")) {
                     return;
                 }
+                //endregion
+
+                //region 通过权限协议找到认证器进行认证
                 ServerAuthenticationProvider ap = ProviderRegistry.getServerProvider(id.getScheme());
                 if (ap != null) {
+                    //遍历客户端凭证、使用验证器验证
                     for (Id authId : ids) {
                         if (authId.getScheme().equals(id.getScheme())
                                 && ap.matches(
@@ -2099,12 +2167,15 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                         }
                     }
                 }
+                //endregion
+
             }
         }
         throw new KeeperException.NoAuthException();
     }
 
     /**
+     * 检查操作节点是否通过资源配额限制
      * check a path whether exceeded the quota.
      *
      * @param path     the path of the node, used for the quota prefix check
@@ -2113,9 +2184,12 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
      * @param type     currently, create and setData need to check quota
      */
     public void checkQuota(String path, byte[] lastData, byte[] data, int type) throws KeeperException.QuotaExceededException {
+        //region 为开启配额检查
         if (!enforceQuota) {
             return;
         }
+        //endregion
+
         long dataBytes = (data == null) ? 0 : data.length;
         ZKDatabase zkDatabase = getZKDatabase();
         String lastPrefix = zkDatabase.getDataTree().getMaxPrefixWithQuota(path);
@@ -2137,6 +2211,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     }
 
     /**
+     * 检查节点配额限制
      * check a path whether exceeded the quota.
      *
      * @param lastPrefix the path of the node which has a quota.
@@ -2144,8 +2219,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
      * @param countDiff  the diff to be added to the count
      * @param namespace  the namespace for collecting quota exceeded errors
      */
-    private void checkQuota(String lastPrefix, long bytesDiff, long countDiff, String namespace)
-            throws KeeperException.QuotaExceededException {
+    private void checkQuota(String lastPrefix, long bytesDiff, long countDiff, String namespace) throws KeeperException.QuotaExceededException {
         LOG.debug("checkQuota: lastPrefix={}, bytesDiff={}, countDiff={}", lastPrefix, bytesDiff, countDiff);
 
         // now check the quota we set
@@ -2182,6 +2256,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
             currentStats = new StatsTrack(node.data);
         }
 
+        //region 检查子节点数限制
         //check the Count Quota
         if (checkCountQuota) {
             long newCount = currentStats.getCount() + countDiff;
@@ -2197,7 +2272,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                 }
             }
         }
+        //endregion
 
+        //region 检查子节点数据大小限制
         //check the Byte Quota
         if (checkByteQuota) {
             long newBytes = currentStats.getBytes() + bytesDiff;
@@ -2212,6 +2289,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                 }
             }
         }
+        //endregion
     }
 
     public static boolean isDigestEnabled() {
@@ -2224,11 +2302,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     }
 
     /**
-     * Trim a path to get the immediate predecessor.
-     *
-     * @param path
-     * @return
-     * @throws KeeperException.BadArgumentsException
+     * 去掉路径最后一级 【/a/b/c -> /a/b】
      */
     private String parentPath(String path) throws KeeperException.BadArgumentsException {
         int lastSlash = path.lastIndexOf('/');
@@ -2238,6 +2312,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         return lastSlash == 0 ? "/" : path.substring(0, lastSlash);
     }
 
+    /**
+     * 从请求中提取权限验证路径 【如节点创建命令需提取父节点路径进行检查】
+     */
     private String effectiveACLPath(Request request) throws KeeperException.BadArgumentsException, KeeperException.InvalidACLException {
         boolean mustCheckACL = false;
         String path = null;
@@ -2290,6 +2367,9 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         return path;
     }
 
+    /**
+     * 获取不同请求需要的节点操作权限
+     */
     private int effectiveACLPerms(Request request) {
         switch (request.type) {
             case OpCode.create:
@@ -2307,6 +2387,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     }
 
     /**
+     * 检查请求ACL权限
      * Check Write Requests for Potential Access Restrictions
      * <p/>
      * Before a request is being proposed to the quorum, lets check it
@@ -2331,8 +2412,10 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         err = KeeperException.Code.OK.intValue();
 
         try {
+            //提取验证路径
             pathToCheck = effectiveACLPath(request);
             if (pathToCheck != null) {
+                //验证权限
                 checkACL(request.cnxn, zkDb.getACL(pathToCheck, null), effectiveACLPerms(request), request.authInfo, pathToCheck, null);
             }
         } catch (KeeperException.NoAuthException e) {
@@ -2364,13 +2447,16 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
         return err == KeeperException.Code.OK.intValue();
     }
 
+    /**
+     * 反序列化请求内容buffer
+     */
     private boolean buffer2Record(ByteBuffer request, Record record) {
         boolean rv = false;
         try {
             ByteBufferInputStream.byteBuffer2Record(request, record);
             request.rewind();
             rv = true;
-        } catch (IOException ex) {
+        } catch (IOException ignored) {
         }
 
         return rv;

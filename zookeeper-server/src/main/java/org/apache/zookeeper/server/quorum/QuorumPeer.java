@@ -689,6 +689,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     protected boolean localSessionsEnabled = false;
 
     /**
+     * 是否可将本地session升级成全局session
      * Whether learners in this quorum should upgrade local sessions to
      * global. Only matters if local sessions are enabled.
      */

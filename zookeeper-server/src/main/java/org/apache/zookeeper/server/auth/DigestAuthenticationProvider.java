@@ -62,6 +62,7 @@ public class DigestAuthenticationProvider implements AuthenticationProvider {
         return enabled;
     }
 
+    @Override
     public String getScheme() {
         return "digest";
     }

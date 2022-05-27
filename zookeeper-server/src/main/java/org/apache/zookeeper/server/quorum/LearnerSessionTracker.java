@@ -1,21 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server.quorum;
 
 import java.io.PrintWriter;
@@ -54,7 +36,7 @@ public class LearnerSessionTracker extends UpgradeableSessionTracker {
 
     private final SessionExpirer expirer;
     // Touch table for the global sessions
-    private final AtomicReference<Map<Long, Integer>> touchTable = new AtomicReference<Map<Long, Integer>>();
+    private final AtomicReference<Map<Long, Integer>> touchTable = new AtomicReference<>();
     private final long serverId;
     private final AtomicLong nextSessionId = new AtomicLong();
 
@@ -62,7 +44,7 @@ public class LearnerSessionTracker extends UpgradeableSessionTracker {
 
     public LearnerSessionTracker(SessionExpirer expirer, ConcurrentMap<Long, Integer> sessionsWithTimeouts, int tickTime, long id, boolean localSessionsEnabled, ZooKeeperServerListener listener) {
         this.expirer = expirer;
-        this.touchTable.set(new ConcurrentHashMap<Long, Integer>());
+        this.touchTable.set(new ConcurrentHashMap<>());
         this.globalSessionsWithTimeouts = sessionsWithTimeouts;
         this.serverId = id;
         nextSessionId.set(SessionTrackerImpl.initializeNextSessionId(serverId));
@@ -93,6 +75,7 @@ public class LearnerSessionTracker extends UpgradeableSessionTracker {
         }
     }
 
+    @Override
     public boolean isGlobalSession(long sessionId) {
         return globalSessionsWithTimeouts.containsKey(sessionId);
     }
@@ -107,6 +90,7 @@ public class LearnerSessionTracker extends UpgradeableSessionTracker {
      * after committed global session, which may cause the same session being
      * tracked on this server and leader.
      */
+    @Override
     public synchronized boolean commitSession(long sessionId, int sessionTimeout) {
         boolean added = globalSessionsWithTimeouts.put(sessionId, sessionTimeout) == null;
 

@@ -26,8 +26,11 @@ public class ObserverRequestProcessor extends ZooKeeperCriticalThread implements
 
     RequestProcessor nextProcessor;
 
-    // We keep a queue of requests. As requests get submitted they are
-    // stored here. The queue is drained in the run() method.
+    /**
+     * 请求缓冲
+     * We keep a queue of requests. As requests get submitted they are
+     * stored here. The queue is drained in the run() method.
+     */
     LinkedBlockingQueue<Request> queuedRequests = new LinkedBlockingQueue<>();
 
     boolean finished = false;
@@ -64,15 +67,18 @@ public class ObserverRequestProcessor extends ZooKeeperCriticalThread implements
                     continue;
                 }
 
+                //region 交由commit处理器处理【写请求在commit挂起等待完成、读请求传到final处理器处理并响应】
                 // We want to queue the request to be processed before we submit
                 // the request to the leader so that we are ready to receive
                 // the response
                 nextProcessor.processRequest(request);
+                //endregion
 
                 if (request.isThrottled()) {
                     continue;
                 }
 
+                //region 事务请求转发给leader处理
                 // We now ship the request to the leader. As with all
                 // other quorum operations, sync also follows this code
                 // path, but different from others, we need to keep track
@@ -104,6 +110,7 @@ public class ObserverRequestProcessor extends ZooKeeperCriticalThread implements
                         }
                         break;
                 }
+                //endregion
             }
         } catch (RuntimeException e) { // spotbugs require explicit catch of RuntimeException
             handleException(this.getName(), e);

@@ -40,6 +40,9 @@ public abstract class QuorumZooKeeperServer extends ZooKeeperServer {
         upgradeableSessionTracker.start();
     }
 
+    /**
+     *
+     */
     public Request checkUpgradeSession(Request request) throws IOException, KeeperException {
         if (request.isThrottled()) {
             return null;
@@ -48,6 +51,7 @@ public abstract class QuorumZooKeeperServer extends ZooKeeperServer {
         // If this is a request for a local session and it is to
         // create an ephemeral node, then upgrade the session and return
         // a new session request for the leader.
+        
         // This is called by the request processor thread (either follower
         // or observer request processor), which is unique to a learner.
         // So will not be called concurrently by two threads.
@@ -94,6 +98,9 @@ public abstract class QuorumZooKeeperServer extends ZooKeeperServer {
         return makeUpgradeRequest(request.sessionId);
     }
 
+    /**
+     * 创建创建session请求、并在session管理器中标记该session升级中
+     */
     private Request makeUpgradeRequest(long sessionId) {
         // Make sure to atomically check local session status, upgrade
         // session, and make the session creation request.  This is to

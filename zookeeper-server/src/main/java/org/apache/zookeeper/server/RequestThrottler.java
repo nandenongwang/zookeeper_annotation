@@ -224,6 +224,9 @@ public class RequestThrottler extends ZooKeeperCriticalThread {
         zks.requestFinished(request);
     }
 
+    /**
+     * 提交请求到请求阀中
+     */
     public void submitRequest(Request request) {
         if (stopping) {
             LOG.debug("Shutdown in progress. Request cannot be processed");

@@ -28,7 +28,8 @@ public class FollowerZooKeeperServer extends LearnerZooKeeperServer {
 
     private static final Logger LOG = LoggerFactory.getLogger(FollowerZooKeeperServer.class);
 
-    /*
+    /**
+     * 待处理请求
      * Pending sync requests
      */
     ConcurrentLinkedQueue<Request> pendingSyncs;

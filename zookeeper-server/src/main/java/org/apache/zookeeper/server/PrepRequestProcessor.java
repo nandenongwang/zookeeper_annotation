@@ -872,6 +872,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
                 case OpCode.createSession:
                 case OpCode.closeSession:
                     if (!request.isLocalSession()) {
+                        //leader自己发出的创建session请求
                         pRequest2Txn(request.type, zks.getNextZxid(), request, null, true);
                     }
                     break;
