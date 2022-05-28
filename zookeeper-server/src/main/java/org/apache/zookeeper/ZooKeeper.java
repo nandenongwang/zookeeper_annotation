@@ -2640,8 +2640,7 @@ public class ZooKeeper implements AutoCloseable {
      *                              error code.
      * @since 3.6.0
      */
-    public void addWatch(String basePath, Watcher watcher, AddWatchMode mode)
-            throws KeeperException, InterruptedException {
+    public void addWatch(String basePath, Watcher watcher, AddWatchMode mode) throws KeeperException, InterruptedException {
         PathUtils.validatePath(basePath);
         validateWatcher(watcher);
         String serverPath = prependChroot(basePath);
@@ -2649,11 +2648,9 @@ public class ZooKeeper implements AutoCloseable {
         RequestHeader h = new RequestHeader();
         h.setType(ZooDefs.OpCode.addWatch);
         AddWatchRequest request = new AddWatchRequest(serverPath, mode.getMode());
-        ReplyHeader r = cnxn.submitRequest(h, request, new ErrorResponse(),
-                new AddWatchRegistration(watcher, basePath, mode));
+        ReplyHeader r = cnxn.submitRequest(h, request, new ErrorResponse(), new AddWatchRegistration(watcher, basePath, mode));
         if (r.getErr() != 0) {
-            throw KeeperException.create(KeeperException.Code.get(r.getErr()),
-                    basePath);
+            throw KeeperException.create(KeeperException.Code.get(r.getErr()), basePath);
         }
     }
 
