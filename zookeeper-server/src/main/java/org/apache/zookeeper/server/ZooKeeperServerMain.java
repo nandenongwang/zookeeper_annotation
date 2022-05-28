@@ -1,21 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server;
 
 import org.apache.yetus.audience.InterfaceAudience;
@@ -42,6 +24,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 /**
+ * 单机启动zk服务
  * This class starts and runs a standalone ZooKeeperServer.
  */
 @InterfaceAudience.Public
@@ -126,6 +109,7 @@ public class ZooKeeperServerMain {
         LOG.info("Starting server");
         FileTxnSnapLog txnLog = null;
         try {
+            //region 启动监控指标测量服务
             try {
                 metricsProvider = MetricsProviderBootstrap.startMetricsProvider(
                         config.getMetricsProviderClassName(),
@@ -134,16 +118,24 @@ public class ZooKeeperServerMain {
                 throw new IOException("Cannot boot MetricsProvider " + config.getMetricsProviderClassName(), error);
             }
             ServerMetrics.metricsProviderInitialized(metricsProvider);
+            //endregion
+
             ProviderRegistry.initialize();
             // Note that this thread isn't going to be doing anything else,
             // so rather than spawning another thread, we will just call
             // run() in this thread.
             // create a file logger url from the command line args
+            //创建状态存储服务
             txnLog = new FileTxnSnapLog(config.dataLogDir, config.dataDir);
+
+            //region 启动jvm暂停监控服务
             JvmPauseMonitor jvmPauseMonitor = null;
             if (config.jvmPauseMonitorToRun) {
                 jvmPauseMonitor = new JvmPauseMonitor(config);
             }
+            //endregion
+
+            //启动zk服务
             final ZooKeeperServer zkServer = new ZooKeeperServer(jvmPauseMonitor, txnLog, config.tickTime, config.minSessionTimeout, config.maxSessionTimeout, config.listenBacklog, null, config.initialConfig);
             txnLog.setServerStats(zkServer.serverStats());
 
@@ -152,11 +144,14 @@ public class ZooKeeperServerMain {
             final CountDownLatch shutdownLatch = new CountDownLatch(1);
             zkServer.registerServerShutdownHandler(new ZooKeeperServerShutdownHandler(shutdownLatch));
 
+            //region 启动运维http管理服务
             // Start Admin server
             adminServer = AdminServerFactory.createAdminServer();
             adminServer.setZooKeeperServer(zkServer);
             adminServer.start();
+            //endregion
 
+            //region 启动对客户端连接服务
             boolean needStartZKServer = true;
             if (config.getClientPortAddress() != null) {
                 cnxnFactory = ServerCnxnFactory.createFactory();
@@ -170,7 +165,9 @@ public class ZooKeeperServerMain {
                 secureCnxnFactory.configure(config.getSecureClientPortAddress(), config.getMaxClientCnxns(), config.getClientPortListenBacklog(), true);
                 secureCnxnFactory.startup(zkServer, needStartZKServer);
             }
+            //endregion
 
+            //region 启动容器节点与可过期临时节点删除检测线程
             containerManager = new ContainerManager(
                     zkServer.getZKDatabase(),
                     zkServer.firstProcessor,
@@ -179,6 +176,8 @@ public class ZooKeeperServerMain {
                     Long.getLong("znode.container.maxNeverUsedIntervalMs", 0)
             );
             containerManager.start();
+            //endregion
+
             ZKAuditProvider.addZKStartStopAuditLog();
 
             serverStarted();

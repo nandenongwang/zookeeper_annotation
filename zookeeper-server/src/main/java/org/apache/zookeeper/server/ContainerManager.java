@@ -1,38 +1,21 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
-import java.nio.ByteBuffer;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import org.apache.zookeeper.ZooDefs;
 import org.apache.zookeeper.common.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.ByteBuffer;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 /**
+ * 容器节点与可过期临时节点检测删除线程
+ * 容器节点：无子节点、新创建节点可等待一定时间后删除
+ * 可过期临时节点：已过过期时间
  * Manages cleanup of container ZNodes. This class is meant to only
  * be run from the leader. There's no harm in running from followers/observers
  * but that will be extra work that's not needed. Once started, it periodically
@@ -44,34 +27,50 @@ public class ContainerManager {
 
     private static final Logger LOG = LoggerFactory.getLogger(ContainerManager.class);
     private final ZKDatabase zkDb;
-    private final RequestProcessor requestProcessor;
-    private final int checkIntervalMs;
-    private final int maxPerMinute;
-    private final long maxNeverUsedIntervalMs;
-    private final Timer timer;
-    private final AtomicReference<TimerTask> task = new AtomicReference<TimerTask>(null);
 
     /**
-     * @param zkDb the ZK database
+     * 处理链 【删除命令会交由处理链按事务提案执行】
+     */
+    private final RequestProcessor requestProcessor;
+
+    /**
+     * 检测任务执行周期
+     */
+    private final int checkIntervalMs;
+
+    /**
+     * 每分钟最大运行次数
+     */
+    private final int maxPerMinute;
+
+    /**
+     * 未变更新容器节点最大删除等待时间
+     */
+    private final long maxNeverUsedIntervalMs;
+    private final Timer timer;
+    private final AtomicReference<TimerTask> task = new AtomicReference<>(null);
+
+    /**
+     * @param zkDb             the ZK database
      * @param requestProcessor request processer - used to inject delete
      *                         container requests
-     * @param checkIntervalMs how often to check containers in milliseconds
-     * @param maxPerMinute the max containers to delete per second - avoids
-     *                     herding of container deletions
+     * @param checkIntervalMs  how often to check containers in milliseconds
+     * @param maxPerMinute     the max containers to delete per second - avoids
+     *                         herding of container deletions
      */
     public ContainerManager(ZKDatabase zkDb, RequestProcessor requestProcessor, int checkIntervalMs, int maxPerMinute) {
         this(zkDb, requestProcessor, checkIntervalMs, maxPerMinute, 0);
     }
 
     /**
-     * @param zkDb the ZK database
-     * @param requestProcessor request processer - used to inject delete
-     *                         container requests
-     * @param checkIntervalMs how often to check containers in milliseconds
-     * @param maxPerMinute the max containers to delete per second - avoids
-     *                     herding of container deletions
+     * @param zkDb                   the ZK database
+     * @param requestProcessor       request processer - used to inject delete
+     *                               container requests
+     * @param checkIntervalMs        how often to check containers in milliseconds
+     * @param maxPerMinute           the max containers to delete per second - avoids
+     *                               herding of container deletions
      * @param maxNeverUsedIntervalMs the max time in milliseconds that a container that has never had
-     *                                  any children is retained
+     *                               any children is retained
      */
     public ContainerManager(ZKDatabase zkDb, RequestProcessor requestProcessor, int checkIntervalMs, int maxPerMinute, long maxNeverUsedIntervalMs) {
         this.zkDb = zkDb;
@@ -157,11 +156,17 @@ public class ContainerManager {
     }
 
     // VisibleForTesting
+
+    /**
+     * 查找可删除节点路径 【包括容器节点与已过期的临时节点】
+     */
     protected Collection<String> getCandidates() {
-        Set<String> candidates = new HashSet<String>();
+        Set<String> candidates = new HashSet<>();
+        //region 查找可删除的容器节点
         for (String containerPath : zkDb.getDataTree().getContainers()) {
             DataNode node = zkDb.getDataTree().getNode(containerPath);
             if ((node != null) && node.getChildren().isEmpty()) {
+                //防止刚创建就正好被删除、没有变更过需要至少等待maxNeverUsedIntervalMs
                 /*
                     cversion > 0: keep newly created containers from being deleted
                     before any children have been added. If you were to create the
@@ -182,6 +187,9 @@ public class ContainerManager {
                 }
             }
         }
+        //endregion
+
+        //region 查找可删除的可过期临时节点
         for (String ttlPath : zkDb.getDataTree().getTtls()) {
             DataNode node = zkDb.getDataTree().getNode(ttlPath);
             if (node != null) {
@@ -196,6 +204,8 @@ public class ContainerManager {
                 }
             }
         }
+        //endregion
+
         return candidates;
     }
 

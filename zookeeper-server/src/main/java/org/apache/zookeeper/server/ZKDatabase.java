@@ -55,7 +55,7 @@ public class ZKDatabase {
     protected DataTree dataTree;
 
     /**
-     * 记录客户端session超时时间
+     * 客户端session与超时时间
      */
     protected ConcurrentHashMap<Long/* sessionId */, Integer/* 超时时间 */> sessionsWithTimeouts;
 

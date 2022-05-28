@@ -1,5 +1,6 @@
 package org.apache.zookeeper.server.quorum;
 
+import org.apache.jute.Record;
 import org.apache.jute.*;
 import org.apache.zookeeper.ZooDefs.OpCode;
 import org.apache.zookeeper.common.Time;
@@ -87,11 +88,9 @@ public class Learner {
     private static final boolean nodelay = System.getProperty("follower.nodelay", "true").equals("true");
 
     public static final String LEARNER_ASYNC_SENDING = "zookeeper.learner.asyncSending";
-    private static boolean asyncSending =
-            Boolean.parseBoolean(ConfigUtils.getPropertyBackwardCompatibleWay(LEARNER_ASYNC_SENDING));
+    private static boolean asyncSending = Boolean.parseBoolean(ConfigUtils.getPropertyBackwardCompatibleWay(LEARNER_ASYNC_SENDING));
     public static final String LEARNER_CLOSE_SOCKET_ASYNC = "zookeeper.learner.closeSocketAsync";
-    public static final boolean closeSocketAsync = Boolean
-            .parseBoolean(ConfigUtils.getPropertyBackwardCompatibleWay(LEARNER_CLOSE_SOCKET_ASYNC));
+    public static final boolean closeSocketAsync = Boolean.parseBoolean(ConfigUtils.getPropertyBackwardCompatibleWay(LEARNER_CLOSE_SOCKET_ASYNC));
 
     static {
         LOG.info("leaderConnectDelayDuringRetryMs: {}", leaderConnectDelayDuringRetryMs);
@@ -605,7 +604,7 @@ public class Learner {
             }
             //endregion
 
-            //region TRUNC 【从同步包中获取leader已提交位置、丢弃之前的脏日志】
+            //region TRUNC 【从同步包中获取leader已提交位置、丢弃之后的脏日志】
             else if (qp.getType() == Leader.TRUNC) {
                 //we need to truncate the log to the lastzxid of the leader
                 self.setSyncMode(QuorumPeer.SyncMode.TRUNC);
@@ -823,19 +822,21 @@ public class Learner {
 
         //region 根据server类型应用待提交日志 【快照到最新日志之间的日志】
 
-        //region 1、follower 【记录待提交日志并提交应用】
+        //region follower 【sync、commit】
         if (zk instanceof FollowerZooKeeperServer) {
             FollowerZooKeeperServer fzk = (FollowerZooKeeperServer) zk;
+            //提交给sync处理器记录日志并相应确认
             for (PacketInFlight p : packetsNotCommitted) {
                 fzk.logRequest(p.hdr, p.rec, p.digest);
             }
+            //提交给commit处理器
             for (Long zxid : packetsCommitted) {
                 fzk.commit(zxid);
             }
         }
         //endregion
 
-        //region 2、observer 【直接提交应用所有待提交日志】
+        //region observer 【commit】
         else if (zk instanceof ObserverZooKeeperServer) {
             // Similar to follower, we need to log requests between the snapshot
             // and UPTODATE
@@ -908,6 +909,8 @@ public class Learner {
         writePacket(pingReply, true);
     }
 
+    //region 关闭相关
+
     /**
      * Shutdown the Peer
      */
@@ -959,5 +962,7 @@ public class Learner {
             LOG.warn("Ignoring error closing connection to leader", e);
         }
     }
+    //endregion
+
 
 }

@@ -1,21 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server.quorum;
 
 import org.apache.yetus.audience.InterfaceAudience;
@@ -111,6 +93,9 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
      */
     private ZKDatabase zkDb;
 
+    /**
+     * jvm监控线程
+     */
     private JvmPauseMonitor jvmPauseMonitor;
 
     /**
@@ -186,17 +171,17 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     public static class QuorumServer {
 
         /**
-         * 内部节点数据同步地址
+         * 内部通信地址
          */
         public MultipleAddresses addr = new MultipleAddresses();
 
         /**
-         * 内部节点选举地址
+         * 选举地址
          */
         public MultipleAddresses electionAddr = new MultipleAddresses();
 
         /**
-         * 节点客户端连接地址
+         * 客户端连接地址
          */
         public InetSocketAddress clientAddr = null;
 
@@ -519,7 +504,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     }
 
     /**
-     * 议员角色
+     * 议员状态 【选举中、普通议员工作中、议长工作中、记录员工作中】
      */
     public enum ServerState {
         LOOKING,
@@ -534,9 +519,25 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
      * Zab protocol that peer is running.
      */
     public enum ZabState {
+
+        /**
+         * 选举阶段、进行选举
+         */
         ELECTION,
+
+        /**
+         * 发现阶段、与成员建立通信连接
+         */
         DISCOVERY,
+
+        /**
+         * 同步阶段、与成员同步数据
+         */
         SYNCHRONIZATION,
+
+        /**
+         * 广播阶段、就客户端提案协商达成一致
+         */
         BROADCAST
     }
 
