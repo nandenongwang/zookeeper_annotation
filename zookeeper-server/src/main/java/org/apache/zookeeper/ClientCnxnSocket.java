@@ -1,21 +1,3 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper;
 
 import org.apache.jute.BinaryInputArchive;
@@ -51,11 +33,13 @@ abstract class ClientCnxnSocket {
     protected boolean initialized;
 
     /**
+     * 消息长度buffer
      * This buffer is only used to read the length of the incoming message.
      */
     protected final ByteBuffer lenBuffer = ByteBuffer.allocateDirect(4);
 
     /**
+     * 消息内容buffer
      * After the length is read, a new incomingBuffer is allocated in
      * readLength() to receive the full message.
      */
@@ -64,11 +48,17 @@ abstract class ClientCnxnSocket {
     protected final AtomicLong recvCount = new AtomicLong(0L);
 
     /**
-     * 最后接受到消息时间
+     * 上次接收消息时间
      */
     protected long lastHeard;
+
+    /**
+     * 上次发送消息时间
+     */
     protected long lastSend;
+
     protected long now;
+
     /**
      * 发送线程
      */
@@ -138,7 +128,7 @@ abstract class ClientCnxnSocket {
     }
 
     /**
-     * 读取sessionId、sessionPwd完成会话建立并发送事件通知默认监听器
+     * 处理创建连接结果 【读取sessionId、sessionPwd完成会话建立并发送事件通知默认监听器】
      */
     void readConnectResult() throws IOException {
         if (LOG.isTraceEnabled()) {
@@ -225,10 +215,7 @@ abstract class ClientCnxnSocket {
      * @throws IOException
      * @throws InterruptedException
      */
-    abstract void doTransport(
-            int waitTimeOut,
-            Queue<Packet> pendingQueue,
-            ClientCnxn cnxn) throws IOException, InterruptedException;
+    abstract void doTransport(int waitTimeOut, Queue<Packet> pendingQueue, ClientCnxn cnxn) throws IOException, InterruptedException;
 
     /**
      * Close the socket.
@@ -248,6 +235,9 @@ abstract class ClientCnxnSocket {
      */
     abstract void sendPacket(Packet p) throws IOException;
 
+    /**
+     * 初始化相关默认配置 【最大包长度】
+     */
     protected void initProperties() throws IOException {
         try {
             packetLen = clientConfig.getInt(

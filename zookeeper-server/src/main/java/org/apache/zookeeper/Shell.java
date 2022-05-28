@@ -1,33 +1,9 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-/* This file copied from Hadoop's security branch,
- * with the following changes:
- * 1. package changed from org.apache.hadoop.util to
- *    org.apache.zookeeper.
- * 2. Usage of Hadoop's Configuration class removed since
- *    it is not available in Zookeeper: instead, system properties
- *    are used.
- * 3. The deprecated getUlimitMemoryCommand() method removed since
- *    it is not needed.
- */
-
 package org.apache.zookeeper;
+
+import org.apache.zookeeper.common.Time;
+import org.apache.zookeeper.server.ExitCode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -37,12 +13,9 @@ import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicBoolean;
-import org.apache.zookeeper.common.Time;
-import org.apache.zookeeper.server.ExitCode;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
+ * 接收命令创建子进程执行、返回输出
  * A base class for running a Unix command.
  *
  * <code>Shell</code> can be used to run unix commands like <code>du</code> or
@@ -53,34 +26,56 @@ public abstract class Shell {
 
     private static final Logger LOG = LoggerFactory.getLogger(Shell.class);
 
-    /** a Unix command to get the current user's name */
+    /**
+     * a Unix command to get the current user's name
+     */
     public static final String USER_NAME_COMMAND = "whoami";
-    /** a Unix command to get the current user's groups list */
+
+    /**
+     * a Unix command to get the current user's groups list
+     */
     public static String[] getGroupsCommand() {
         return new String[]{"bash", "-c", "groups"};
     }
-    /** a Unix command to get a given user's groups list */
+
+    /**
+     * a Unix command to get a given user's groups list
+     */
     public static String[] getGroupsForUserCommand(final String user) {
         //'groups username' command return is non-consistent across different unixes
         return new String[]{"bash", "-c", "id -Gn " + user};
     }
-    /** a Unix command to set permission */
+
+    /**
+     * a Unix command to set permission
+     */
     public static final String SET_PERMISSION_COMMAND = "chmod";
-    /** a Unix command to set owner */
+    /**
+     * a Unix command to set owner
+     */
     public static final String SET_OWNER_COMMAND = "chown";
     public static final String SET_GROUP_COMMAND = "chgrp";
-    /** Return a Unix command to get permission information. */
+
+    /**
+     * Return a Unix command to get permission information.
+     */
     public static String[] getGET_PERMISSION_COMMAND() {
         //force /bin/ls, except on windows.
         return new String[]{(WINDOWS ? "ls" : "/bin/ls"), "-ld"};
     }
 
-    /**Time after which the executing script would be timedout*/
+    /**
+     * Time after which the executing script would be timedout
+     */
     protected long timeOutInterval = 0L;
-    /** If or not script timed out*/
+    /**
+     * If or not script timed out
+     */
     private AtomicBoolean timedOut;
 
-    /** a Unix command to get ulimit of a process. */
+    /**
+     * a Unix command to get ulimit of a process.
+     */
     public static final String ULIMIT_COMMAND = "ulimit";
 
     /**
@@ -88,13 +83,14 @@ public abstract class Shell {
      * to a given child process. This is only relevant when we are forking a
      * process from within the Mapper or the Reducer implementations.
      * Also see Hadoop Pipes and Hadoop Streaming.
-     *
+     * <p>
      * It also checks to ensure that we are running on a *nix platform else
      * (e.g. in Cygwin/Windows) it returns <code>null</code>.
+     *
      * @param memoryLimit virtual memory limit
      * @return a <code>String[]</code> with the ulimit command arguments or
-     *         <code>null</code> if we are running on a non *nix platform or
-     *         if the limit is unspecified.
+     * <code>null</code> if we are running on a non *nix platform or
+     * if the limit is unspecified.
      */
     public static String[] getUlimitMemoryCommand(int memoryLimit) {
         // ulimit isn't supported on Windows
@@ -105,7 +101,9 @@ public abstract class Shell {
         return new String[]{ULIMIT_COMMAND, "-v", String.valueOf(memoryLimit)};
     }
 
-    /** Set to true on Windows platforms */
+    /**
+     * Set to true on Windows platforms
+     */
     public static final boolean WINDOWS /* borrowed from Path.WINDOWS */ = System.getProperty("os.name").startsWith("Windows");
 
     private long interval;   // refresh interval in msec
@@ -115,7 +113,9 @@ public abstract class Shell {
     private Process process; // sub process used to execute the command
     private int exitCode;
 
-    /**If or not script finished executing*/
+    /**
+     * If or not script finished executing
+     */
     private volatile AtomicBoolean completed;
 
     public Shell() {
@@ -124,28 +124,34 @@ public abstract class Shell {
 
     /**
      * @param interval the minimum duration to wait before re-executing the
-     *        command.
+     *                 command.
      */
     public Shell(long interval) {
         this.interval = interval;
         this.lastTime = (interval < 0) ? 0 : -interval;
     }
 
-    /** set the environment for the command
+    /**
+     * set the environment for the command
+     *
      * @param env Mapping of environment variables
      */
     protected void setEnvironment(Map<String, String> env) {
         this.environment = env;
     }
 
-    /** set the working directory
+    /**
+     * set the working directory
+     *
      * @param dir The directory where the command would be executed
      */
     protected void setWorkingDirectory(File dir) {
         this.dir = dir;
     }
 
-    /** check to see if a command needs to be executed and execute if needed */
+    /**
+     * check to see if a command needs to be executed and execute if needed
+     */
     protected void run() throws IOException {
         if (lastTime + interval > Time.currentElapsedTime()) {
             return;
@@ -154,7 +160,9 @@ public abstract class Shell {
         runCommand();
     }
 
-    /** Run a command */
+    /**
+     * Run a command
+     */
     private void runCommand() throws IOException {
         ProcessBuilder builder = new ProcessBuilder(getExecString());
         Timer timeOutTimer = null;
@@ -247,20 +255,28 @@ public abstract class Shell {
         }
     }
 
-    /** return an array containing the command name and its parameters */
+    /**
+     * return an array containing the command name and its parameters
+     */
     protected abstract String[] getExecString();
 
-    /** Parse the execution result */
+    /**
+     * Parse the execution result
+     */
     protected abstract void parseExecResult(BufferedReader lines) throws IOException;
 
-    /** get the current sub-process executing the given command
+    /**
+     * get the current sub-process executing the given command
+     *
      * @return process executing the command
      */
     public Process getProcess() {
         return process;
     }
 
-    /** get the exit code
+    /**
+     * get the exit code
+     *
      * @return the exit code of the process
      */
     public int getExitCode() {
@@ -296,7 +312,7 @@ public abstract class Shell {
      */
     public static class ShellCommandExecutor extends Shell {
 
-        private String[] command;
+        private final String[] command;
         private StringBuffer output;
 
         public ShellCommandExecutor(String[] execString) {
@@ -315,15 +331,15 @@ public abstract class Shell {
          * Create a new instance of the ShellCommandExecutor to execute a command.
          *
          * @param execString The command to execute with arguments
-         * @param dir If not-null, specifies the directory which should be set
-         *            as the current working directory for the command.
-         *            If null, the current working directory is not modified.
-         * @param env If not-null, environment of the command will include the
-         *            key-value pairs specified in the map. If null, the current
-         *            environment is not modified.
-         * @param timeout Specifies the time in milliseconds, after which the
-         *                command will be killed and the status marked as timedout.
-         *                If 0, the command will not be timed out.
+         * @param dir        If not-null, specifies the directory which should be set
+         *                   as the current working directory for the command.
+         *                   If null, the current working directory is not modified.
+         * @param env        If not-null, environment of the command will include the
+         *                   key-value pairs specified in the map. If null, the current
+         *                   environment is not modified.
+         * @param timeout    Specifies the time in milliseconds, after which the
+         *                   command will be killed and the status marked as timedout.
+         *                   If 0, the command will not be timed out.
          */
         public ShellCommandExecutor(String[] execString, File dir, Map<String, String> env, long timeout) {
             command = execString.clone();
@@ -336,7 +352,9 @@ public abstract class Shell {
             timeOutInterval = timeout;
         }
 
-        /** Execute the shell command. */
+        /**
+         * Execute the shell command.
+         */
         public void execute() throws IOException {
             this.run();
         }
@@ -354,7 +372,9 @@ public abstract class Shell {
             }
         }
 
-        /** Get the output of the shell command.*/
+        /**
+         * Get the output of the shell command.
+         */
         public String getOutput() {
             return (output == null) ? "" : output.toString();
         }
@@ -394,7 +414,6 @@ public abstract class Shell {
 
     /**
      * Set if the command has timed out.
-     *
      */
     private void setTimedOut() {
         this.timedOut.set(true);
@@ -404,6 +423,7 @@ public abstract class Shell {
      * Static method to execute a shell command.
      * Covers most of the simple cases without requiring the user to implement
      * the <code>Shell</code> interface.
+     *
      * @param cmd shell command to execute.
      * @return the output of the executed command.
      */
@@ -415,8 +435,9 @@ public abstract class Shell {
      * Static method to execute a shell command.
      * Covers most of the simple cases without requiring the user to implement
      * the <code>Shell</code> interface.
-     * @param env the map of environment key=value
-     * @param cmd shell command to execute.
+     *
+     * @param env     the map of environment key=value
+     * @param cmd     shell command to execute.
      * @param timeout time in milliseconds after which script should be marked timeout
      * @return the output of the executed command.o
      */
@@ -431,6 +452,7 @@ public abstract class Shell {
      * Static method to execute a shell command.
      * Covers most of the simple cases without requiring the user to implement
      * the <code>Shell</code> interface.
+     *
      * @param env the map of environment key=value
      * @param cmd shell command to execute.
      * @return the output of the executed command.
@@ -444,7 +466,7 @@ public abstract class Shell {
      */
     private static class ShellTimeoutTimerTask extends TimerTask {
 
-        private Shell shell;
+        private final Shell shell;
 
         public ShellTimeoutTimerTask(Shell shell) {
             this.shell = shell;

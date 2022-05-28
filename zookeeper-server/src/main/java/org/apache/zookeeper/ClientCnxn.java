@@ -144,8 +144,11 @@ public class ClientCnxn {
     /**
      * 客户端监听器管理器
      */
-    @Getter
     private final ZKWatchManager watchManager;
+
+    public ZKWatchManager getWatcherManager() {
+        return watchManager;
+    }
 
     /**
      * 会话ID

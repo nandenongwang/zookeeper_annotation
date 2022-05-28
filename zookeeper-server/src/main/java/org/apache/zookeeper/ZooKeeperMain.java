@@ -46,6 +46,7 @@ public class ZooKeeperMain {
         return printWatches;
     }
 
+    //region 加载所有命令行命令
     static {
         commandMap.put("connect", "host:port");
         commandMap.put("history", "");
@@ -63,6 +64,11 @@ public class ZooKeeperMain {
                 });
     }
 
+    //endregion
+
+    /**
+     * 打印所有命令用法
+     */
     static void usage() {
         System.err.println("ZooKeeper -server host:port -client-configuration properties-file cmd args");
         List<String> cmdList = new ArrayList<>(commandMap.keySet());
@@ -72,6 +78,9 @@ public class ZooKeeperMain {
         }
     }
 
+    /**
+     * 默认监听器 【阻塞等待连接建立完成】
+     */
     private class MyWatcher implements Watcher {
 
         @Override
@@ -92,11 +101,12 @@ public class ZooKeeperMain {
     }
 
     /**
+     * 命令行命令
      * A storage class for both command line options and shell commands.
      */
     static class MyCommandOptions {
 
-        private Map<String, String> options = new HashMap<>();
+        private final Map<String, String> options = new HashMap<>();
         private List<String> cmdArgs = null;
         private String command = null;
         public static final Pattern ARGS_PATTERN = Pattern.compile("\\s*([^\"\']\\S*|\"[^\"]*\"|'[^']*')\\s*");
@@ -128,6 +138,7 @@ public class ZooKeeperMain {
         }
 
         /**
+         * 解析参数
          * Parses a command line that may contain one or more flags
          * before an optional command string
          *
@@ -171,6 +182,7 @@ public class ZooKeeperMain {
         }
 
         /**
+         * 解析命令
          * Breaks a string into command + arguments.
          *
          * @param cmdstring string of form "cmd arg1 arg2..etc"
@@ -179,7 +191,7 @@ public class ZooKeeperMain {
         public boolean parseCommand(String cmdstring) {
             Matcher matcher = ARGS_PATTERN.matcher(cmdstring);
 
-            List<String> args = new LinkedList<String>();
+            List<String> args = new LinkedList<>();
             while (matcher.find()) {
                 String value = matcher.group(1);
                 if (QUOTED_PATTERN.matcher(value).matches()) {
@@ -199,14 +211,17 @@ public class ZooKeeperMain {
     }
 
     /**
+     * 增加执行历史
      * Makes a list of possible completions, either for commands
      * or for zk nodes if the token to complete begins with /
      */
-
     protected void addToHistory(int i, String cmd) {
         history.put(i, cmd);
     }
 
+    /**
+     * 获取支持命令名
+     */
     public static List<String> getCommands() {
         List<String> cmdList = new ArrayList<>(commandMap.keySet());
         Collections.sort(cmdList);
@@ -221,6 +236,9 @@ public class ZooKeeperMain {
         System.out.println("\n" + msg);
     }
 
+    /**
+     * 与服务端建立连接
+     */
     protected void connectToZK(String newHost) throws InterruptedException, IOException {
         if (zk != null && zk.getState().isAlive()) {
             zk.close();
@@ -274,6 +292,9 @@ public class ZooKeeperMain {
         this.zk = zk;
     }
 
+    /**
+     * 开启命令repl
+     */
     void run() throws IOException, InterruptedException {
         if (cl.getCommand() == null) {
             System.out.println("Welcome to ZooKeeper!");
@@ -323,15 +344,24 @@ public class ZooKeeperMain {
         ServiceUtils.requestSystemExit(exitCode);
     }
 
+    /**
+     * 处理命令行输入 【解析、记录、执行】
+     */
     public void executeLine(String line) throws InterruptedException, IOException {
         if (!"".equals(line)) {
+            //解析命令
             cl.parseCommand(line);
+            //记录执行历史
             addToHistory(commandCount, line);
+            //执行命令
             processCmd(cl);
             commandCount++;
         }
     }
 
+    /**
+     * 执行命令
+     */
     protected boolean processCmd(MyCommandOptions co) throws IOException, InterruptedException {
         boolean watch = false;
         try {

@@ -6,7 +6,7 @@ import org.apache.zookeeper.Watcher.Event.KeeperState;
 import org.apache.zookeeper.proto.WatcherEvent;
 
 /**
- * 事件
+ * 触发事件
  * A WatchedEvent represents a change on the ZooKeeper that a Watcher
  * is able to respond to.  The WatchedEvent includes exactly what happened,
  * the current state of the ZooKeeper, and the path of the znode that

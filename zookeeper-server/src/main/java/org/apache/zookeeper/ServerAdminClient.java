@@ -1,34 +1,21 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
+import org.apache.yetus.audience.InterfaceAudience;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.ByteBuffer;
-import org.apache.yetus.audience.InterfaceAudience;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
+/**
+ * 与指定地址建立socket连接发送4字符运维命令
+ */
 @InterfaceAudience.Public
 public class ServerAdminClient {
 
@@ -194,8 +181,8 @@ public class ServerAdminClient {
             ByteBuffer res = ByteBuffer.wrap(resBytes);
             long retv = res.getLong();
             System.out.println("rc=" + rc
-                               + " retv=0" + Long.toOctalString(retv)
-                               + " masks=0" + Long.toOctalString(traceMask));
+                    + " retv=0" + Long.toOctalString(retv)
+                    + " masks=0" + Long.toOctalString(traceMask));
             assert (retv == traceMask);
         } catch (IOException e) {
             LOG.warn("Unexpected exception", e);
@@ -248,7 +235,7 @@ public class ServerAdminClient {
 
     private static void usage() {
         System.out.println("usage: java [-cp CLASSPATH] org.apache.zookeeper.ServerAdminClient "
-                           + "host port op (ruok|stat|dump|kill|gettracemask|settracemask) [arguments]");
+                + "host port op (ruok|stat|dump|kill|gettracemask|settracemask) [arguments]");
 
     }
 

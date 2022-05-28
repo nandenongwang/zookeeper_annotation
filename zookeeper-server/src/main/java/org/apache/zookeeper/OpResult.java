@@ -1,32 +1,20 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper;
+
+import org.apache.zookeeper.data.Stat;
 
 import java.util.Arrays;
 import java.util.List;
-import org.apache.zookeeper.data.Stat;
 
 /**
+ * 各类型操作返回结果
  * Encodes the result of a single part of a multiple operation commit.
  */
 public abstract class OpResult {
 
-    private int type;
+    /**
+     * 操作类型
+     */
+    private final int type;
 
     private OpResult(int type) {
         this.type = type;
@@ -36,8 +24,9 @@ public abstract class OpResult {
      * Encodes the return type as from ZooDefs.OpCode.  Can be used
      * to dispatch to the correct cast needed for getting the desired
      * additional result data.
-     * @see ZooDefs.OpCode
+     *
      * @return an integer identifying what kind of operation this result came from.
+     * @see ZooDefs.OpCode
      */
     public int getType() {
         return type;
@@ -87,10 +76,10 @@ public abstract class OpResult {
             CreateResult other = (CreateResult) o;
 
             boolean statsAreEqual = stat == null
-                                    && other.stat == null
-                                    || (stat != null
-                                        && other.stat != null
-                                        && stat.getMzxid() == other.stat.getMzxid());
+                    && other.stat == null
+                    || (stat != null
+                    && other.stat != null
+                    && stat.getMzxid() == other.stat.getMzxid());
             return getType() == other.getType() && path.equals(other.getPath()) && statsAreEqual;
         }
 
@@ -250,6 +239,7 @@ public abstract class OpResult {
         public byte[] getData() {
             return data == null ? null : Arrays.copyOf(data, data.length);
         }
+
         public Stat getStat() {
             return stat;
         }
@@ -277,8 +267,8 @@ public abstract class OpResult {
     /**
      * An error result from any kind of operation.  The point of error results
      * is that they contain an error code which helps understand what happened.
-     * @see KeeperException.Code
      *
+     * @see KeeperException.Code
      */
     public static class ErrorResult extends OpResult {
 
