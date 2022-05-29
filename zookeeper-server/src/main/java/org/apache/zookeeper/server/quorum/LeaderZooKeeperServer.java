@@ -45,8 +45,10 @@ public class LeaderZooKeeperServer extends QuorumZooKeeperServer {
         commitProcessor.start();
         ProposalRequestProcessor proposalProcessor = new ProposalRequestProcessor(this, commitProcessor);
         proposalProcessor.initialize();
+        //learner转发请求从prepRequestProcessor开始
         prepRequestProcessor = new PrepRequestProcessor(this, proposalProcessor);
         prepRequestProcessor.start();
+        //客户端请求从LeaderRequestProcessor开始
         firstProcessor = new LeaderRequestProcessor(this, prepRequestProcessor);
 
         setupContainerManager();

@@ -1,34 +1,5 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server.admin;
 
-import java.io.IOException;
-import java.security.GeneralSecurityException;
-import java.security.KeyStore;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServlet;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 import org.apache.zookeeper.common.QuorumX509Util;
 import org.apache.zookeeper.common.SecretUtils;
 import org.apache.zookeeper.common.X509Util;
@@ -36,12 +7,7 @@ import org.apache.zookeeper.server.ZooKeeperServer;
 import org.eclipse.jetty.http.HttpVersion;
 import org.eclipse.jetty.security.ConstraintMapping;
 import org.eclipse.jetty.security.ConstraintSecurityHandler;
-import org.eclipse.jetty.server.HttpConfiguration;
-import org.eclipse.jetty.server.HttpConnectionFactory;
-import org.eclipse.jetty.server.SecureRequestCustomizer;
-import org.eclipse.jetty.server.Server;
-import org.eclipse.jetty.server.ServerConnector;
-import org.eclipse.jetty.server.SslConnectionFactory;
+import org.eclipse.jetty.server.*;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.util.security.Constraint;
@@ -49,9 +15,22 @@ import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.security.GeneralSecurityException;
+import java.security.KeyStore;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 /**
+ * 管理服务jetty实现
  * This class encapsulates a Jetty server for running Commands.
- *
+ * <p>
  * Given the default settings, start a ZooKeeper server and visit
  * http://hostname:8080/commands for links to all registered commands. Visiting
  * http://hostname:8080/commands/commandname will execute the associated
@@ -82,23 +61,23 @@ public class JettyAdminServer implements AdminServer {
 
     public JettyAdminServer() throws AdminServerException, IOException, GeneralSecurityException {
         this(
-            System.getProperty("zookeeper.admin.serverAddress", DEFAULT_ADDRESS),
-            Integer.getInteger("zookeeper.admin.serverPort", DEFAULT_PORT),
-            Integer.getInteger("zookeeper.admin.idleTimeout", DEFAULT_IDLE_TIMEOUT),
-            System.getProperty("zookeeper.admin.commandURL", DEFAULT_COMMAND_URL),
-            Integer.getInteger("zookeeper.admin.httpVersion", DEFAULT_HTTP_VERSION),
-            Boolean.getBoolean("zookeeper.admin.portUnification"),
-            Boolean.getBoolean("zookeeper.admin.forceHttps"));
+                System.getProperty("zookeeper.admin.serverAddress", DEFAULT_ADDRESS),
+                Integer.getInteger("zookeeper.admin.serverPort", DEFAULT_PORT),
+                Integer.getInteger("zookeeper.admin.idleTimeout", DEFAULT_IDLE_TIMEOUT),
+                System.getProperty("zookeeper.admin.commandURL", DEFAULT_COMMAND_URL),
+                Integer.getInteger("zookeeper.admin.httpVersion", DEFAULT_HTTP_VERSION),
+                Boolean.getBoolean("zookeeper.admin.portUnification"),
+                Boolean.getBoolean("zookeeper.admin.forceHttps"));
     }
 
     public JettyAdminServer(
-        String address,
-        int port,
-        int timeout,
-        String commandUrl,
-        int httpVersion,
-        boolean portUnification,
-        boolean forceHttps) throws IOException, GeneralSecurityException {
+            String address,
+            int port,
+            int timeout,
+            String commandUrl,
+            int httpVersion,
+            boolean portUnification,
+            boolean forceHttps) throws IOException, GeneralSecurityException {
 
         this.port = port;
         this.idleTimeout = timeout;
@@ -187,10 +166,10 @@ public class JettyAdminServer implements AdminServer {
             // Server.start() only throws Exception, so let's at least wrap it
             // in an identifiable subclass
             String message = String.format(
-                "Problem starting AdminServer on address %s, port %d and command URL %s",
-                address,
-                port,
-                commandUrl);
+                    "Problem starting AdminServer on address %s, port %d and command URL %s",
+                    address,
+                    port,
+                    commandUrl);
             throw new AdminServerException(message, e);
         }
         LOG.info("Started AdminServer on address {}, port {} and command URL {}", address, port, commandUrl);
@@ -198,7 +177,7 @@ public class JettyAdminServer implements AdminServer {
 
     /**
      * Stop the embedded Jetty server.
-     *
+     * <p>
      * This is not very important except for tests where multiple
      * JettyAdminServers are started and may try to bind to the same ports if
      * previous servers aren't shut down.
@@ -209,17 +188,17 @@ public class JettyAdminServer implements AdminServer {
             server.stop();
         } catch (Exception e) {
             String message = String.format(
-                "Problem stopping AdminServer on address %s, port %d and command URL %s",
-                address,
-                port,
-                commandUrl);
+                    "Problem stopping AdminServer on address %s, port %d and command URL %s",
+                    address,
+                    port,
+                    commandUrl);
             throw new AdminServerException(message, e);
         }
     }
 
     /**
      * Set the ZooKeeperServer that will be used to run Commands.
-     *
+     * <p>
      * It is not necessary to set the ZK server before calling
      * AdminServer.start(), and the ZK server can be set to null when, e.g.,
      * that server is being shut down. If the ZK server is not set or set to
@@ -231,12 +210,16 @@ public class JettyAdminServer implements AdminServer {
         this.zkServer = zkServer;
     }
 
+    /**
+     * 命令处理servlet
+     */
     private class CommandServlet extends HttpServlet {
 
         private static final long serialVersionUID = 1L;
 
         @Override
         protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+            //region 解析命令
             // Capture the command name from the URL
             String cmd = request.getPathInfo();
             if (cmd == null || "/".equals(cmd)) {
@@ -256,15 +239,20 @@ public class JettyAdminServer implements AdminServer {
             for (Map.Entry<String, String[]> entry : parameterMap.entrySet()) {
                 kwargs.put(entry.getKey(), entry.getValue()[0]);
             }
+            //endregion
 
+            //region 执行命令
             // Run the command
             CommandResponse cmdResponse = Commands.runCommand(cmd, zkServer, kwargs);
+            //endregion
 
+            //region 输出响应
             // Format and print the output of the command
             CommandOutputter outputter = new JsonOutputter();
             response.setStatus(HttpServletResponse.SC_OK);
             response.setContentType(outputter.getContentType());
             outputter.output(cmdResponse, response.getWriter());
+            //endregion
         }
 
     }
@@ -273,11 +261,12 @@ public class JettyAdminServer implements AdminServer {
      * Returns a list of URLs to each registered Command.
      */
     private List<String> commandLinks() {
-        return Commands.getPrimaryNames().stream().sorted().map(command -> String.format("<a href=\"%s\">%s</a>", commandUrl + "/" + command , command)).collect(Collectors.toList());
+        return Commands.getPrimaryNames().stream().sorted().map(command -> String.format("<a href=\"%s\">%s</a>", commandUrl + "/" + command, command)).collect(Collectors.toList());
     }
 
     /**
      * Add constraint to a given context to disallow TRACE method
+     *
      * @param ctxHandler the context to modify
      */
     private void constrainTraceMethod(ServletContextHandler ctxHandler) {
@@ -290,7 +279,7 @@ public class JettyAdminServer implements AdminServer {
         cmt.setPathSpec("/*");
 
         ConstraintSecurityHandler securityHandler = new ConstraintSecurityHandler();
-        securityHandler.setConstraintMappings(new ConstraintMapping[] {cmt});
+        securityHandler.setConstraintMappings(new ConstraintMapping[]{cmt});
 
         ctxHandler.setSecurityHandler(securityHandler);
     }
@@ -298,7 +287,8 @@ public class JettyAdminServer implements AdminServer {
     /**
      * Returns the password specified by the given property or stored in the file specified by the
      * given path property. If both are specified, the password stored in the file will be returned.
-     * @param propertyName the name of the property
+     *
+     * @param propertyName     the name of the property
      * @param pathPropertyName the name of the path property
      * @return password value
      */

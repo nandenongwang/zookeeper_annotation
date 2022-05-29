@@ -651,7 +651,7 @@ public class LearnerHandler extends ZooKeeperThread {
             //
             LOG.debug("Sending UPTODATE message to {}", sid);
             queuedPackets.add(new QuorumPacket(Leader.UPTODATE, -1, null, null));
-
+            //region 循环接受处理learner消息
             while (true) {
                 qp = new QuorumPacket();
                 ia.readRecord(qp, "packet");
@@ -731,7 +731,10 @@ public class LearnerHandler extends ZooKeeperThread {
                     //endregion
                 }
             }
-        } catch (IOException e) {
+            //endregion
+        }
+        //region 异常处理
+        catch (IOException e) {
             LOG.error("Unexpected exception in LearnerHandler: ", e);
             closeSocket();
         } catch (InterruptedException e) {
@@ -752,6 +755,7 @@ public class LearnerHandler extends ZooKeeperThread {
             messageTracker.dumpToLog(remoteAddr);
             shutdown();
         }
+        //endregion
     }
 
     /**

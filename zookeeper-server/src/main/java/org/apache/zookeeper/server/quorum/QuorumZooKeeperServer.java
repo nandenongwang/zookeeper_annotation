@@ -51,15 +51,21 @@ public abstract class QuorumZooKeeperServer extends ZooKeeperServer {
         // If this is a request for a local session and it is to
         // create an ephemeral node, then upgrade the session and return
         // a new session request for the leader.
-        
+
         // This is called by the request processor thread (either follower
         // or observer request processor), which is unique to a learner.
         // So will not be called concurrently by two threads.
+
+        //本地session不能创建临时节点
+
+        //region 已经是全局session或者非创建节点请求(必然也非创建临时节点)则无需升级session
         if ((request.type != OpCode.create && request.type != OpCode.create2 && request.type != OpCode.multi)
                 || !upgradeableSessionTracker.isLocalSession(request.sessionId)) {
             return null;
         }
+        //endregion
 
+        //region 本地session创建节点请求、但非创建临时节点也无需升级session
         if (OpCode.multi == request.type) {
             MultiOperationRecord multiTransactionRecord = new MultiOperationRecord();
             request.request.rewind();
@@ -89,11 +95,14 @@ public abstract class QuorumZooKeeperServer extends ZooKeeperServer {
                 return null;
             }
         }
+        //endregion
 
+        //region 本地session升级关闭、异常【默认开启】
         // Uh oh.  We need to upgrade before we can proceed.
         if (!self.isLocalSessionsUpgradingEnabled()) {
             throw new KeeperException.EphemeralOnLocalSessionException();
         }
+        //endregion
 
         return makeUpgradeRequest(request.sessionId);
     }
