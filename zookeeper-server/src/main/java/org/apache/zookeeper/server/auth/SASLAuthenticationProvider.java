@@ -23,10 +23,12 @@ import org.apache.zookeeper.server.ServerCnxn;
 
 public class SASLAuthenticationProvider implements AuthenticationProvider {
 
+    @Override
     public String getScheme() {
         return "sasl";
     }
 
+    @Override
     public KeeperException.Code handleAuthentication(ServerCnxn cnxn, byte[] authData) {
         // Should never call this: SASL authentication is negotiated at session initiation.
         // TODO: consider substituting current implementation of direct ClientCnxn manipulation with
@@ -35,6 +37,7 @@ public class SASLAuthenticationProvider implements AuthenticationProvider {
 
     }
 
+    @Override
     public boolean matches(String id, String aclExpr) {
         if ((id.equals("super") || id.equals(aclExpr))) {
             return true;
@@ -43,10 +46,12 @@ public class SASLAuthenticationProvider implements AuthenticationProvider {
         return readAccessUser != null && aclExpr.equals(readAccessUser);
     }
 
+    @Override
     public boolean isAuthenticated() {
         return true;
     }
 
+    @Override
     public boolean isValid(String id) {
         // Since the SASL authenticator will usually be used with Kerberos authentication,
         // it should enforce that these names are valid according to Kerberos's

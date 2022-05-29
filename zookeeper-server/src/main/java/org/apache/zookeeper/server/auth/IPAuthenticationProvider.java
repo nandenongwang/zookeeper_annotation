@@ -4,6 +4,9 @@ import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.data.Id;
 import org.apache.zookeeper.server.ServerCnxn;
 
+/**
+ * 客户端IP地址认证方式
+ */
 public class IPAuthenticationProvider implements AuthenticationProvider {
 
     @Override
@@ -58,6 +61,7 @@ public class IPAuthenticationProvider implements AuthenticationProvider {
         }
     }
 
+    @Override
     public boolean matches(String id, String aclExpr) {
         String[] parts = aclExpr.split("/", 2);
         byte[] aclAddr = addr2Bytes(parts[0]);
@@ -89,10 +93,12 @@ public class IPAuthenticationProvider implements AuthenticationProvider {
         return true;
     }
 
+    @Override
     public boolean isAuthenticated() {
         return false;
     }
 
+    @Override
     public boolean isValid(String id) {
         String[] parts = id.split("/", 2);
         byte[] aclAddr = addr2Bytes(parts[0]);

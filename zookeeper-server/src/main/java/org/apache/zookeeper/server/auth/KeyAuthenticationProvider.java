@@ -55,6 +55,7 @@ public class KeyAuthenticationProvider extends ServerAuthenticationProvider {
 
     private static final Logger LOG = LoggerFactory.getLogger(KeyAuthenticationProvider.class);
 
+    @Override
     public String getScheme() {
         return "key";
     }
