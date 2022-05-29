@@ -200,7 +200,7 @@ public class Observer extends Learner {
             case Leader.SYNC:
                 ((ObserverZooKeeperServer) zk).sync();
                 break;
-            //region 接受leader新的已达成一致的已提交日志通知、直接提交到本地
+            //region 接受leader新的已达成一致的已提交日志通知、直接提交并应用到本地
             case Leader.INFORM:
                 ServerMetrics.getMetrics().LEARNER_COMMIT_RECEIVED_COUNT.add(1);
                 logEntry = SerializeUtils.deserializeTxn(qp.getData());

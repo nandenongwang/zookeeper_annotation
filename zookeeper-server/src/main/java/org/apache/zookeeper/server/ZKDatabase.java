@@ -711,6 +711,9 @@ public class ZKDatabase {
         this.snapLog.close();
     }
 
+    /**
+     * 更新
+     */
     public synchronized void initConfigInZKDatabase(QuorumVerifier qv) {
         if (qv == null) {
             return; // only happens during tests

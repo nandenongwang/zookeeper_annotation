@@ -47,6 +47,7 @@ public class FileSnap implements SnapShot {
      *
      * @return info of last snapshot
      */
+    @Override
     public SnapshotInfo getLastSnapshotInfo() {
         return this.lastSnapshotInfo;
     }
@@ -140,6 +141,7 @@ public class FileSnap implements SnapShot {
      *
      * @return the file containing the most recent snapshot
      */
+    @Override
     public File findMostRecentSnapshot() {
         List<File> files = findNValidSnapshots(1);
         if (files.size() == 0) {
@@ -238,6 +240,7 @@ public class FileSnap implements SnapShot {
      * @param snapShot the file to store snapshot into
      * @param fsync    sync the file immediately after write
      */
+    @Override
     public synchronized void serialize(DataTree dt, Map<Long, Integer> sessions, File snapShot, boolean fsync) throws IOException {
         if (!close) {
             try (CheckedOutputStream snapOS = SnapStream.getOutputStream(snapShot, fsync)) {

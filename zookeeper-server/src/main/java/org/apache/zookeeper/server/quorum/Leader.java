@@ -80,7 +80,7 @@ public class Leader extends LearnerMaster {
     volatile LearnerCnxAcceptor cnxAcceptor = null;
 
     // list of all the learners, including followers and observers
-    private final HashSet<LearnerHandler> learners = new HashSet<LearnerHandler>();
+    private final HashSet<LearnerHandler> learners = new HashSet<>();
 
     private final BufferStats proposalStats;
 
@@ -170,7 +170,7 @@ public class Leader extends LearnerMaster {
     }
 
     // Pending sync requests. Must access under 'this' lock.
-    private final Map<Long, List<LearnerSyncRequest>> pendingSyncs = new HashMap<Long, List<LearnerSyncRequest>>();
+    private final Map<Long, List<LearnerSyncRequest>> pendingSyncs = new HashMap<>();
 
     public synchronized int getNumPendingSyncs() {
         return pendingSyncs.size();
@@ -287,7 +287,7 @@ public class Leader extends LearnerMaster {
         return Optional.empty();
     }
 
-    //region 消息类型名
+    //region 内部通信消息类型名
 
     /**
      * This message is for follower to expect diff
@@ -305,6 +305,7 @@ public class Leader extends LearnerMaster {
     static final int SNAP = 15;
 
     /**
+     * observer注册包
      * This tells the leader that the connecting peer is actually an observer
      */
     static final int OBSERVERINFO = 16;
@@ -316,6 +317,7 @@ public class Leader extends LearnerMaster {
     static final int NEWLEADER = 10;
 
     /**
+     * follower注册包
      * This message type is sent by a follower to pass the last zxid. This is here
      * for backward compatibility purposes.
      */
@@ -444,7 +446,7 @@ public class Leader extends LearnerMaster {
     //endregion
 
     /**
-     *
+     * 广播出等待确认的消息
      */
     final ConcurrentMap<Long, Proposal> outstandingProposals = new ConcurrentHashMap<>();
 
@@ -582,6 +584,10 @@ public class Leader extends LearnerMaster {
     StateSummary leaderStateSummary;
 
     long epoch = -1;
+
+    /**
+     * 需要等待follower连接 【多数连接上后true】
+     */
     boolean waitingForNewEpoch = true;
 
     // when a reconfig occurs where the leader is removed or becomes an observer,
@@ -624,12 +630,13 @@ public class Leader extends LearnerMaster {
 
         try {
             self.setZabState(QuorumPeer.ZabState.DISCOVERY);
+            //region 服务发现阶段
             self.tick.set(0);
             zk.loadData();
 
             leaderStateSummary = new StateSummary(self.getCurrentEpoch(), zk.getLastProcessedZxid());
 
-            //region 开启议员间连接监听
+            //region 开启议员间连接监听线程
             // Start thread that waits for connection requests from
             // new followers.
             cnxAcceptor = new LearnerCnxAcceptor();
@@ -694,8 +701,10 @@ public class Leader extends LearnerMaster {
             waitForEpochAck(self.getId(), leaderStateSummary);
             self.setCurrentEpoch(epoch);
             self.setLeaderAddressAndId(self.getQuorumAddress(), self.getId());
-            self.setZabState(QuorumPeer.ZabState.SYNCHRONIZATION);
+            //endregion
 
+            self.setZabState(QuorumPeer.ZabState.SYNCHRONIZATION);
+            //region 数据同步阶段
             try {
                 waitForNewLeaderAck(self.getId(), zk.getZxid());
             } catch (InterruptedException e) {
@@ -745,8 +754,10 @@ public class Leader extends LearnerMaster {
             if (!System.getProperty("zookeeper.leaderServes", "yes").equals("no")) {
                 self.setZooKeeperServer(zk);
             }
+            //endregion
 
             self.setZabState(QuorumPeer.ZabState.BROADCAST);
+            //region 提案广播阶段
             self.adminServer.setZooKeeperServer(zk);
 
             // We ping twice a tick, so we only update the tick every other
@@ -824,14 +835,18 @@ public class Leader extends LearnerMaster {
                     }
                     tickSkip = !tickSkip;
                 }
+
+                //region 发送ping
                 for (LearnerHandler f : getLearners()) {
                     f.ping();
                 }
+                //endregion
             }
             if (shutdownMessage != null) {
                 shutdown(shutdownMessage);
                 // leader goes in looking state
             }
+            //endregion
         } finally {
             zk.unregisterJMX(this);
         }
@@ -911,7 +926,7 @@ public class Leader extends LearnerMaster {
         // start with an initial set of candidates that are voters from new config that
         // acknowledged the reconfig op (there must be a quorum). Choose one of them as
         // current leader candidate
-        HashSet<Long> candidates = new HashSet<Long>(newQVAcksetPair.getAckset());
+        HashSet<Long> candidates = new HashSet<>(newQVAcksetPair.getAckset());
         candidates.remove(self.getId()); // if we're here, I shouldn't be the leader
         long curCandidate = candidates.iterator().next();
 
@@ -943,6 +958,8 @@ public class Leader extends LearnerMaster {
     }
 
     /**
+     * 尝试提交提案
+     *
      * @return True if committed, otherwise false.
      **/
     public synchronized boolean tryToCommit(Proposal p, long zxid, SocketAddress followerAddr) {
@@ -958,12 +975,13 @@ public class Leader extends LearnerMaster {
         }
 
         // in order to be committed, a proposal must be accepted by a quorum.
-        //
+        // 提案已经收到足够确认、可以提交
         // getting a quorum from all necessary configurations.
         if (!p.hasAllQuorums()) {
             return false;
         }
 
+        //region 向本地、follower、observer等同步提案
         // commit proposals in order
         if (zxid != lastCommitted + 1) {
             LOG.warn(
@@ -981,7 +999,10 @@ public class Leader extends LearnerMaster {
 
         if (p.request == null) {
             LOG.warn("Going to commit null: {}", p);
-        } else if (p.request.getHdr().getType() == OpCode.reconfig) {
+        }
+
+        //region leader迁移请求、通知follower和observer变更leader
+        else if (p.request.getHdr().getType() == OpCode.reconfig) {
             LOG.debug("Committing a reconfiguration! {}", outstandingProposals.size());
 
             //if this server is voter in new config with the same quorum address,
@@ -1005,22 +1026,35 @@ public class Leader extends LearnerMaster {
             // receive the commit message.
             commitAndActivate(zxid, designatedLeader);
             informAndActivate(p, designatedLeader);
-        } else {
+        }
+        //endregion
+
+        //region 向follower发送提交包、向observer发送应用包
+        else {
             p.request.logLatency(ServerMetrics.getMetrics().QUORUM_ACK_LATENCY);
             commit(zxid);
             inform(p);
         }
+        //endregion
+
+        //region 本地提交提案
         zk.commitProcessor.commit(p.request);
+        //endregion
+
+        //region todo sync请求
         if (pendingSyncs.containsKey(zxid)) {
             for (LearnerSyncRequest r : pendingSyncs.remove(zxid)) {
                 sendSync(r);
             }
         }
+        //endregion
 
         return true;
+        //endregion
     }
 
     /**
+     * 接收处理follower的提案确认消息
      * Keep a count of acks that are received by the leader for a particular
      * proposal
      *
@@ -1100,7 +1134,7 @@ public class Leader extends LearnerMaster {
     }
 
     /**
-     * 维护已达成一致可提交提案 【提案在后续处理器中应用后移除】
+     * 维护已达成一致等待提交提案 【直接转发给final处理器应用并响应】
      */
     static class ToBeAppliedRequestProcessor implements RequestProcessor {
 
@@ -1195,6 +1229,7 @@ public class Leader extends LearnerMaster {
     long lastCommitted = -1;
 
     /**
+     * 向所有follower提交提案
      * Create a commit packet and send it to all the members of the quorum
      *
      * @param zxid
@@ -1208,8 +1243,11 @@ public class Leader extends LearnerMaster {
         ServerMetrics.getMetrics().COMMIT_COUNT.add(1);
     }
 
+    /**
+     * 通知所有follower迁移leader
+     */
     //commit and send some info
-    public void commitAndActivate(long zxid, long designatedLeader) {
+    public void commitAndActivate(long zxid, long designatedLeader/* 新指定leader */) {
         synchronized (this) {
             lastCommitted = zxid;
         }
@@ -1223,6 +1261,7 @@ public class Leader extends LearnerMaster {
     }
 
     /**
+     * 通知所有observer应用提案
      * Create an inform packet and send it to all observers.
      */
     public void inform(Proposal proposal) {
@@ -1451,24 +1490,35 @@ public class Leader extends LearnerMaster {
         }
     }
 
+    /**
+     * 等待多数参与投票节点、晋升到新的任期
+     */
     @Override
     public long getEpochToPropose(long sid, long lastAcceptedEpoch) throws InterruptedException, IOException {
         synchronized (connectingFollowers) {
+            //已经完成连接、直接返回
             if (!waitingForNewEpoch) {
                 return epoch;
             }
+            //递增新任期
             if (lastAcceptedEpoch >= epoch) {
                 epoch = lastAcceptedEpoch + 1;
             }
+            //是否为参与选举节点
             if (isParticipant(sid)) {
                 connectingFollowers.add(sid);
             }
             QuorumVerifier verifier = self.getQuorumVerifier();
+            //region 大多数follower已经连接
             if (connectingFollowers.contains(self.getId()) && verifier.containsQuorum(connectingFollowers)) {
                 waitingForNewEpoch = false;
                 self.setAcceptedEpoch(epoch);
                 connectingFollowers.notifyAll();
-            } else {
+            }
+            //endregion
+
+            //region 连接上的follower未达到多数、等待follower连接
+            else {
                 long start = Time.currentElapsedTime();
                 if (sid == self.getId()) {
                     timeStartWaitForEpoch = start;
@@ -1483,6 +1533,8 @@ public class Leader extends LearnerMaster {
                     throw new InterruptedException("Timeout while waiting for epoch from quorum");
                 }
             }
+            //endregion
+
             return epoch;
         }
     }
@@ -1493,7 +1545,7 @@ public class Leader extends LearnerMaster {
     }
 
     // VisibleForTesting
-    protected final Set<Long> electingFollowers = new HashSet<Long>();
+    protected final Set<Long> electingFollowers = new HashSet<>();
     // VisibleForTesting
     protected boolean electionFinished = false;
 

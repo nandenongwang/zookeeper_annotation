@@ -1,6 +1,5 @@
 package org.apache.zookeeper.server.quorum;
 
-import org.apache.jute.Record;
 import org.apache.jute.*;
 import org.apache.zookeeper.ZooDefs.OpCode;
 import org.apache.zookeeper.common.Time;
@@ -471,7 +470,7 @@ public class Learner {
      */
     protected long/* 任期第一条日志ID */ registerWithLeader(int pktType) throws IOException {
 
-        //region 同步发送observer注册包【OBSERVERINFO、包括最后日志ID、serverId等】
+        //region 同步发送observer注册包【followerinfo或observerinfo、包括最后日志ID、serverId等】
         /*
          * Send follower info, including last zxid and sid
          */
@@ -645,7 +644,7 @@ public class Learner {
             while (self.isRunning()) {
                 readPacket(qp);
                 switch (qp.getType()) {
-                    //region PROPOSAL 接收单个提案存储待提交日志中
+                    //region PROPOSAL 接收单个提案放入待提交日志中
                     case Leader.PROPOSAL:
                         PacketInFlight pif = new PacketInFlight();
                         logEntry = SerializeUtils.deserializeTxn(qp.getData());

@@ -41,6 +41,7 @@ public class EmptySnapshotTest {
             super(snapDir);
         }
 
+        @Override
         public synchronized void serialize(DataTree dt, Map<Long, Integer> sessions, File snapShot, boolean fsync) throws IOException {
             // Create empty new file.
             assertTrue(snapShot.createNewFile());
