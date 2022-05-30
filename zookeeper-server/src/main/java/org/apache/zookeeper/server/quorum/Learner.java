@@ -666,6 +666,7 @@ public class Learner {
                                 throw new Exception("changes proposed in reconfig");
                             }
                         }
+                        //region 未传输快照
                         if (!writeToTxnLog) {
                             if (pif.hdr.getZxid() != qp.getZxid()) {
                                 LOG.warn(
@@ -676,7 +677,13 @@ public class Learner {
                                 zk.processTxn(pif.hdr, pif.rec);
                                 packetsNotCommitted.remove();
                             }
-                        } else {
+                        }
+                        //endregion
+
+                        //region 传输了快照
+
+                        //endregion
+                        else {
                             packetsCommitted.add(qp.getZxid());
                         }
                         break;
@@ -808,7 +815,7 @@ public class Learner {
 
         //region 根据server类型应用待提交日志 【快照到最新日志之间的日志】
 
-        //region 1、follower 【sync同步记录日志、commit应用】
+        //region 1、follower 【未提交的挂起到sync处理器中等待提交、已提交的直接commit提交】
         if (zk instanceof FollowerZooKeeperServer) {
             FollowerZooKeeperServer fzk = (FollowerZooKeeperServer) zk;
             //提交给sync处理器记录日志并相应确认
@@ -822,7 +829,7 @@ public class Learner {
         }
         //endregion
 
-        //region 2、observer 【commit应用、无需记录日志】
+        //region 2、observer 【commit已提交的】
         else if (zk instanceof ObserverZooKeeperServer) {
             // Similar to follower, we need to log requests between the snapshot
             // and UPTODATE

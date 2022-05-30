@@ -57,8 +57,14 @@ public class FollowerZooKeeperServer extends LearnerZooKeeperServer {
         syncProcessor.start();
     }
 
+    /**
+     * 等待leader commit达成一致的提案
+     */
     LinkedBlockingQueue<Request> pendingTxns = new LinkedBlockingQueue<>();
 
+    /**
+     * 处理leader同步的新提案、存入挂起提案队列中等待leader commit
+     */
     public void logRequest(TxnHeader hdr, Record txn, TxnDigest digest) {
         Request request = new Request(hdr.getClientId(), hdr.getCxid(), hdr.getType(), hdr, txn, hdr.getZxid());
         request.setTxnDigest(digest);
