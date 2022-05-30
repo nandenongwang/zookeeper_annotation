@@ -2559,8 +2559,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     protected void updateElectionVote(long newEpoch) {
         Vote currentVote = getCurrentVote();
         if (currentVote != null) {
-            setCurrentVote(new Vote(currentVote.getId(), currentVote.getZxid(), currentVote.getElectionEpoch(), newEpoch, currentVote
-                    .getState()));
+            setCurrentVote(new Vote(currentVote.getId(), currentVote.getZxid(), currentVote.getElectionEpoch(), newEpoch, currentVote.getState()));
         }
     }
 

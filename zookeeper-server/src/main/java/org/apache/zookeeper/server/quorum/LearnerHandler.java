@@ -237,6 +237,7 @@ public class LearnerHandler extends ZooKeeperThread {
     protected final MessageTracker messageTracker;
 
     /**
+     * 消息发送线程是否已启动
      * Keep track of whether we have started send packets thread
      */
     private volatile boolean sendingThreadStarted = false;
@@ -259,6 +260,7 @@ public class LearnerHandler extends ZooKeeperThread {
     private long leaderLastZxid;
 
     /**
+     * 数据同步流控器
      * for sync throttling
      */
     private LearnerSyncThrottler syncThrottler = null;
@@ -463,7 +465,7 @@ public class LearnerHandler extends ZooKeeperThread {
             oa = BinaryOutputArchive.getArchive(bufferedOutput);
             //endregion
 
-            //region 读取并解析注册包【FOLLOWERINFO、OBSERVERINFO】
+            //region 读取并解析注册包【FOLLOWERINFO、OBSERVERINFO、等待多数follower连接并晋升任期】
             QuorumPacket qp = new QuorumPacket();
             ia.readRecord(qp, "packet");
 
@@ -521,7 +523,7 @@ public class LearnerHandler extends ZooKeeperThread {
             long newLeaderZxid = ZxidUtils.makeZxid(newEpoch, 0);
             //endregion
 
-            //region 发送leader信息包并等待任期确认包
+            //region 发送leader信息包并等待任期确认包 【等待多数follower确认】
             if (this.getVersion() < 0x10000) {
                 // we are going to have to extrapolate the epoch information
                 long epoch = ZxidUtils.getEpochFromZxid(zxid);
@@ -548,17 +550,24 @@ public class LearnerHandler extends ZooKeeperThread {
             }
             //endregion
 
+            //region 获取learner最后应用提案ID
             peerLastZxid = ss.getLastZxid();
+            //endregion
 
-            //是否需要快照
+            //region 根据learner最后应用提案ID判断是否需要同步快照
             // Take any necessary action if we need to send TRUNC or DIFF
             // startForwarding() will be called in all cases
             boolean needSnap = syncFollower(peerLastZxid, learnerMaster);
+            //endregion
 
+            //region 是否需要同步线程数 【follower不需要、observer需要】
             // syncs between followers and the leader are exempt from throttling because it
             // is important to keep the state of quorum servers up-to-date. The exempted syncs
             // are counted as concurrent syncs though
             boolean exemptFromThrottle = getLearnerType() != LearnerType.OBSERVER;
+            //endregion
+
+            //region 开启同步流控器并发送快照包(若需要传输快照)
             /* if we are not truncating or sending a diff just send a snapshot */
             if (needSnap) {
                 syncThrottler = learnerMaster.getLearnerSnapSyncThrottler();
@@ -592,7 +601,9 @@ public class LearnerHandler extends ZooKeeperThread {
                 ServerMetrics.getMetrics().INFLIGHT_DIFF_COUNT.add(syncThrottler.getSyncInProgress());
                 ServerMetrics.getMetrics().DIFF_COUNT.add(1);
             }
+            //endregion
 
+            //region
             LOG.debug("Sending NEWLEADER message to {}", sid);
             // the version of this quorumVerifier will be set by leader.lead() in case
             // the leader is just being established. waitForEpochAck makes sure that readyToStart is true if
@@ -605,9 +616,12 @@ public class LearnerHandler extends ZooKeeperThread {
                 queuedPackets.add(newLeaderQP);
             }
             bufferedOutput.flush();
+            //endregion
 
+            //region 开启发送线程
             // Start thread that blast packets in the queue to learner
             startSendingPackets();
+            //endregion
 
             /*
              * Have to wait for the first ACK, wait until
@@ -651,7 +665,8 @@ public class LearnerHandler extends ZooKeeperThread {
             //
             LOG.debug("Sending UPTODATE message to {}", sid);
             queuedPackets.add(new QuorumPacket(Leader.UPTODATE, -1, null, null));
-            //region 循环接受处理learner消息
+
+            //region 循环接受处理learner工作状态时消息
             while (true) {
                 qp = new QuorumPacket();
                 ia.readRecord(qp, "packet");
@@ -759,6 +774,7 @@ public class LearnerHandler extends ZooKeeperThread {
     }
 
     /**
+     * 启动消息发送线程
      * Start thread that will forward any packet in the queue to the follower
      */
     protected void startSendingPackets() {

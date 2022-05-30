@@ -84,7 +84,7 @@ public class Learner {
      */
     private static final int leaderConnectDelayDuringRetryMs = Integer.getInteger("zookeeper.leaderConnectDelayDuringRetryMs", 100);
 
-    private static final boolean nodelay = System.getProperty("follower.nodelay", "true").equals("true");
+    private static final boolean nodelay = "true".equals(System.getProperty("follower.nodelay", "true"));
 
     public static final String LEARNER_ASYNC_SENDING = "zookeeper.learner.asyncSending";
     private static boolean asyncSending = Boolean.parseBoolean(ConfigUtils.getPropertyBackwardCompatibleWay(LEARNER_ASYNC_SENDING));
@@ -141,7 +141,7 @@ public class Learner {
     }
 
     /**
-     * 写出报文
+     * 向leader写出报文
      * write a packet to the leader.
      * <p>
      * This method is called by multiple threads. We need to make sure that only one thread is writing to leaderOs at a time.
@@ -149,9 +149,6 @@ public class Learner {
      * When packets are sent asynchronously, sender.queuePacket() is called, which writes to a BlockingQueue, which is thread-safe.
      * Reading from this BlockingQueue and writing to leaderOs is the learner sender thread only.
      * So we have only one thread writing to leaderOs at a time in either case.
-     *
-     * @param pp the proposal packet to be sent to the leader
-     * @throws IOException
      */
     void writePacket(QuorumPacket pp, boolean flush/* 同步或异步 */) throws IOException {
         if (asyncSending) {
@@ -189,9 +186,6 @@ public class Learner {
     /**
      * 从leader读取一条报文
      * read a packet from the leader
-     *
-     * @param pp the packet to be instantiated
-     * @throws IOException
      */
     void readPacket(QuorumPacket pp) throws IOException {
         synchronized (leaderIs) {
@@ -210,9 +204,6 @@ public class Learner {
     /**
      * 转发客户端请求给leader
      * send a request packet to the leader
-     *
-     * @param request the request from the client
-     * @throws IOException
      */
     void request(Request request) throws IOException {
         if (request.isThrottled()) {
@@ -345,9 +336,9 @@ public class Learner {
      */
     class LeaderConnector implements Runnable {
 
-        private AtomicReference<Socket> socket;
-        private InetSocketAddress address;
-        private CountDownLatch latch;
+        private final AtomicReference<Socket> socket;
+        private final InetSocketAddress address;
+        private final CountDownLatch latch;
 
         LeaderConnector(InetSocketAddress address, AtomicReference<Socket> socket, CountDownLatch latch) {
             this.address = address;
@@ -463,10 +454,6 @@ public class Learner {
      * 向leader注册该learner 【observer、follower】
      * Once connected to the leader or learner master, perform the handshake
      * protocol to establish a following / observing connection.
-     *
-     * @param pktType
-     * @return the zxid the Leader sends for synchronization purposes.
-     * @throws IOException
      */
     protected long/* 任期第一条日志ID */ registerWithLeader(int pktType) throws IOException {
 
@@ -490,11 +477,11 @@ public class Learner {
         writePacket(qp, true);
         //endregion
 
-        //region 读取注册包响应
+        //region 读取注册包响应 【leader信息包】
         readPacket(qp);
         //endregion
 
-        //region 通过leader信息报文更新节点任期、并恢复任期确认报文
+        //region 通过leader信息报文更新节点任期、并回复任期确认报文
         final long newEpoch = ZxidUtils.getEpochFromZxid(qp.getZxid());
         if (qp.getType() == Leader.LEADERINFO) {
             // we are connected to a 1.0 server so accept the new epoch and read the next packet
@@ -522,7 +509,7 @@ public class Learner {
         }
         //endregion
 
-        //region 非注册响应包 【第一个报文因是leader响应的leader信息报文、更新新任期并报错】
+        //region 非注册响应包 【第一个报文应是leader响应的leader信息报文、更新新任期并报错】
         else {
             if (newEpoch > self.getAcceptedEpoch()) {
                 self.setAcceptedEpoch(newEpoch);
@@ -537,13 +524,9 @@ public class Learner {
     }
 
     /**
-     * 从leader同步日志
+     * 从leader同步日志 【同步阶段】
      * Finally, synchronize our history with the Leader (if Follower)
      * or the LearnerMaster (if Observer).
-     *
-     * @param newLeaderZxid
-     * @throws IOException
-     * @throws InterruptedException
      */
     protected void syncWithLeader(long newLeaderZxid) throws Exception {
         QuorumPacket ack = new QuorumPacket(Leader.ACK, 0, null, null);
@@ -669,7 +652,7 @@ public class Learner {
                         break;
                     //endregion
 
-                    //region COMMIT、COMMITANDACTIVATE
+                    //region COMMIT、COMMITANDACTIVATE 接受
                     case Leader.COMMIT:
                     case Leader.COMMITANDACTIVATE:
                         pif = packetsNotCommitted.peekFirst();
@@ -743,7 +726,7 @@ public class Learner {
                         break;
                     //endregion
 
-                    //region UPTODATE
+                    //region UPTODATE 同步完成、可以开始正常工作
                     case Leader.UPTODATE:
                         LOG.info("Learner received UPTODATE message");
                         if (newLeaderQV != null) {
@@ -761,7 +744,7 @@ public class Learner {
                         break outerLoop;
                     //endregion
 
-                    //region NEWLEADER
+                    //region NEWLEADER 任期晋升消息、响应确认
                     case Leader.NEWLEADER: // Getting NEWLEADER here instead of in discovery
                         // means this is Zab 1.0
                         LOG.info("Learner received NEWLEADER message");
@@ -803,13 +786,16 @@ public class Learner {
             }
         }
 
-        //region 发回确认包、标识新任期之前的日志已接收完毕
+        //region 再次确认、表示历史日志已接收完毕、将从新晋任期开始工作
         ack.setZxid(ZxidUtils.makeZxid(newEpoch, 0));
         writePacket(ack, true);
         //endregion
 
+        //region 设置服务运行状态为运行中、可以开始处理客户端消息
         zk.startServing();
+        //endregion
 
+        //region 更新当前选票任期为新晋任期
         /*
          * Update the election vote here to ensure that all members of the
          * ensemble report the same vote to new servers that start up and
@@ -818,10 +804,11 @@ public class Learner {
          * @see https://issues.apache.org/jira/browse/ZOOKEEPER-1732
          */
         self.updateElectionVote(newEpoch);
+        //endregion
 
         //region 根据server类型应用待提交日志 【快照到最新日志之间的日志】
 
-        //region follower 【sync、commit】
+        //region 1、follower 【sync同步记录日志、commit应用】
         if (zk instanceof FollowerZooKeeperServer) {
             FollowerZooKeeperServer fzk = (FollowerZooKeeperServer) zk;
             //提交给sync处理器记录日志并相应确认
@@ -835,14 +822,14 @@ public class Learner {
         }
         //endregion
 
-        //region observer 【commit】
+        //region 2、observer 【commit应用、无需记录日志】
         else if (zk instanceof ObserverZooKeeperServer) {
             // Similar to follower, we need to log requests between the snapshot
             // and UPTODATE
             ObserverZooKeeperServer ozk = (ObserverZooKeeperServer) zk;
             for (PacketInFlight p : packetsNotCommitted) {
                 Long zxid = packetsCommitted.peekFirst();
-                if (p.hdr.getZxid() != zxid) {
+                if (zxid != null && p.hdr.getZxid() != zxid) {
                     // log warning message if there is no matching commit
                     // old leader send outstanding proposal to observer
                     LOG.warn(
@@ -869,7 +856,6 @@ public class Learner {
         }
         //endregion
         //endregion
-
     }
 
     protected void revalidate(QuorumPacket qp) throws IOException {
@@ -962,6 +948,4 @@ public class Learner {
         }
     }
     //endregion
-
-
 }

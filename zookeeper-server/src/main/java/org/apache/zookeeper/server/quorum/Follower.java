@@ -74,6 +74,7 @@ public class Follower extends Learner {
             self.setZabState(QuorumPeer.ZabState.DISCOVERY);
             QuorumServer leaderServer = findLeader();
             try {
+                //region 发现阶段 【发送learner信息注册包、处理响应leader信息包并回复任期确认包】
                 connectToLeader(leaderServer.addr, leaderServer.hostname);
                 connectionTime = System.currentTimeMillis();
                 long newEpochZxid = registerWithLeader(Leader.FOLLOWERINFO);
@@ -92,9 +93,15 @@ public class Follower extends Learner {
                 }
                 long startTime = Time.currentElapsedTime();
                 self.setLeaderAddressAndId(leaderServer.addr, leaderServer.getId());
+                //endregion
+
                 self.setZabState(QuorumPeer.ZabState.SYNCHRONIZATION);
+                //region 同步阶段
                 syncWithLeader(newEpochZxid);
+                //endregion
+
                 self.setZabState(QuorumPeer.ZabState.BROADCAST);
+                //region 广播阶段 【读取leader消息、处理消息】
                 completedSync = true;
                 long syncTime = Time.currentElapsedTime() - startTime;
                 ServerMetrics.getMetrics().FOLLOWER_SYNC_TIME.add(syncTime);
@@ -112,10 +119,10 @@ public class Follower extends Learner {
                     readPacket(qp);
                     processPacket(qp);
                 }
+                //endregion
             } catch (Exception e) {
                 LOG.warn("Exception when following the leader", e);
                 closeSocket();
-
                 // clear pending revalidations
                 pendingRevalidations.clear();
             }
@@ -135,11 +142,11 @@ public class Follower extends Learner {
                 messageTracker.dumpToLog(leaderAddr.toString());
             }
         }
-
         //endregion
     }
 
     /**
+     * 处理leader消息
      * Examine the packet received in qp and dispatch based on its contents.
      *
      * @param qp
@@ -211,7 +218,7 @@ public class Follower extends Learner {
             }
             //endregion
 
-            //region
+            //region 提交并执行配置变更提案 【若leader变更需连接到新leader】
             case Leader.COMMITANDACTIVATE:
                 // get the new configuration from the request
                 Request request = fzk.pendingTxns.element();
@@ -233,9 +240,14 @@ public class Follower extends Learner {
                     throw new Exception("changes proposed in reconfig");
                 }
                 break;
+            //endregion
+
+            //region 同步完成 【广播阶段不会收到此类型消息】
             case Leader.UPTODATE:
                 LOG.error("Received an UPTODATE message after Follower started");
                 break;
+            //endregion
+
             case Leader.REVALIDATE:
                 if (om == null || !om.revalidateLearnerSession(qp)) {
                     revalidate(qp);
@@ -247,7 +259,7 @@ public class Follower extends Learner {
             default:
                 LOG.warn("Unknown packet type: {}", LearnerHandler.packetToString(qp));
                 break;
-            //endregion
+
         }
     }
 

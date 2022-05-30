@@ -324,6 +324,7 @@ public class Leader extends LearnerMaster {
     static final int FOLLOWERINFO = 11;
 
     /**
+     * 同步结束 【之后可以开始正常工作处理客户端请求】
      * This message type is sent by the leader to indicate that the follower is
      * now uptodate andt can start responding to clients.
      */
@@ -643,13 +644,13 @@ public class Leader extends LearnerMaster {
             cnxAcceptor.start();
             //endregion
 
+            //region 等待follower连接晋升任期、提案ID新任期从0开始
             long epoch = getEpochToPropose(self.getId(), self.getAcceptedEpoch());
-
             zk.setZxid(ZxidUtils.makeZxid(epoch, 0));
-
             synchronized (this) {
                 lastProposed = zk.getZxid();
             }
+            //endregion
 
             newLeaderProposal.packet = new QuorumPacket(NEWLEADER, zk.getZxid(), null, null);
 
@@ -694,13 +695,15 @@ public class Leader extends LearnerMaster {
                 newLeaderProposal.addQuorumVerifier(self.getLastSeenQuorumVerifier());
             }
 
+            //region 等待newleader数据包确认消息、完成任期晋升
             // We have to get at least a majority of servers in sync with
             // us. We do this by waiting for the NEWLEADER packet to get
             // acknowledged
-
             waitForEpochAck(self.getId(), leaderStateSummary);
             self.setCurrentEpoch(epoch);
             self.setLeaderAddressAndId(self.getQuorumAddress(), self.getId());
+            //endregion
+
             //endregion
 
             self.setZabState(QuorumPeer.ZabState.SYNCHRONIZATION);
