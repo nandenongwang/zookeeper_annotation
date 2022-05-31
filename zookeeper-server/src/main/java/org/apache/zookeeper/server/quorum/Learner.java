@@ -1,6 +1,7 @@
 package org.apache.zookeeper.server.quorum;
 
 import org.apache.jute.*;
+import org.apache.jute.Record;
 import org.apache.zookeeper.ZooDefs.OpCode;
 import org.apache.zookeeper.common.Time;
 import org.apache.zookeeper.common.X509Exception;
@@ -546,7 +547,7 @@ public class Learner {
         Deque<Long> packetsCommitted = new ArrayDeque<>();
         Deque<PacketInFlight> packetsNotCommitted = new ArrayDeque<>();
         synchronized (zk) {
-            //region DIFF
+            //region DIFF 【依次同步差异提案】
             if (qp.getType() == Leader.DIFF) {
                 LOG.info("Getting a diff from the leader 0x{}", Long.toHexString(qp.getZxid()));
                 self.setSyncMode(QuorumPeer.SyncMode.DIFF);
@@ -627,7 +628,7 @@ public class Learner {
             while (self.isRunning()) {
                 readPacket(qp);
                 switch (qp.getType()) {
-                    //region PROPOSAL 接收单个提案放入待提交日志中
+                    //region PROPOSAL 接收提案、存入待提交集合 【接收提案与提交提案相邻接收】
                     case Leader.PROPOSAL:
                         PacketInFlight pif = new PacketInFlight();
                         logEntry = SerializeUtils.deserializeTxn(qp.getData());
@@ -652,7 +653,7 @@ public class Learner {
                         break;
                     //endregion
 
-                    //region COMMIT、COMMITANDACTIVATE 接受
+                    //region COMMIT、COMMITANDACTIVATE 接收提交提案、存入提交列表中
                     case Leader.COMMIT:
                     case Leader.COMMITANDACTIVATE:
                         pif = packetsNotCommitted.peekFirst();
@@ -666,7 +667,7 @@ public class Learner {
                                 throw new Exception("changes proposed in reconfig");
                             }
                         }
-                        //region 未传输快照
+                        //region 需要快照、应用到内存中并从未提交集合中移除
                         if (!writeToTxnLog) {
                             if (pif.hdr.getZxid() != qp.getZxid()) {
                                 LOG.warn(
@@ -680,16 +681,16 @@ public class Learner {
                         }
                         //endregion
 
-                        //region 传输了快照
-
-                        //endregion
+                        //region 不需要快照、加入提交列表
                         else {
                             packetsCommitted.add(qp.getZxid());
                         }
                         break;
+                        //endregion
+
                     //endregion
 
-                    //region INFORM、INFORMANDACTIVATE
+                    //region INFORM、INFORMANDACTIVATE 【不会收到直接应用包】
                     case Leader.INFORM:
                     case Leader.INFORMANDACTIVATE:
                         PacketInFlight packet = new PacketInFlight();
@@ -793,7 +794,7 @@ public class Learner {
             }
         }
 
-        //region 再次确认、表示历史日志已接收完毕、将从新晋任期开始工作
+        //region 确认同步完成UPTODATE包、表示历史日志已接收完毕、将从新晋任期开始工作
         ack.setZxid(ZxidUtils.makeZxid(newEpoch, 0));
         writePacket(ack, true);
         //endregion
