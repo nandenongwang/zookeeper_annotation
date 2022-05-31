@@ -1030,7 +1030,7 @@ public class LearnerHandler extends ZooKeeperThread {
      *                          on the leader to follow Zab 1.0 protocol.
      * @return last zxid of the queued proposal
      */
-    protected long queueCommittedProposals(Iterator<Proposal> itr/* 已提交提案缓存 */,
+    protected long queueCommittedProposals(Iterator<Proposal> itr/* 可读取日志【已提交提案缓存|日志迭代器】 */,
                                            long peerLastZxid/* follower最后应用ID、从此处开始传输 */,
                                            Long maxZxid/* 传输截止ID、null表示不进行限制 */,
                                            Long lastCommittedZxid/* 最大缓存提案ID*/) {
