@@ -101,7 +101,7 @@ public class Leader extends LearnerMaster {
     }
 
     // list of followers that are ready to follow (i.e synced with the leader)
-    private final HashSet<LearnerHandler> forwardingFollowers = new HashSet<LearnerHandler>();
+    private final HashSet<LearnerHandler> forwardingFollowers = new HashSet<>();
 
     /**
      * Returns a copy of the current forwarding follower snapshot
@@ -113,7 +113,7 @@ public class Leader extends LearnerMaster {
     }
 
     public List<LearnerHandler> getNonVotingFollowers() {
-        List<LearnerHandler> nonVotingFollowers = new ArrayList<LearnerHandler>();
+        List<LearnerHandler> nonVotingFollowers = new ArrayList<>();
         synchronized (forwardingFollowers) {
             for (LearnerHandler lh : forwardingFollowers) {
                 if (!isParticipant(lh.getSid())) {
@@ -134,14 +134,14 @@ public class Leader extends LearnerMaster {
         }
     }
 
-    private final HashSet<LearnerHandler> observingLearners = new HashSet<LearnerHandler>();
+    private final HashSet<LearnerHandler> observingLearners = new HashSet<>();
 
     /**
      * Returns a copy of the current observer snapshot
      */
     public List<LearnerHandler> getObservingLearners() {
         synchronized (observingLearners) {
-            return new ArrayList<LearnerHandler>(observingLearners);
+            return new ArrayList<>(observingLearners);
         }
     }
 
@@ -609,9 +609,6 @@ public class Leader extends LearnerMaster {
 
     /**
      * This method is main function that is called to lead
-     *
-     * @throws IOException
-     * @throws InterruptedException
      */
     void lead() throws IOException, InterruptedException {
 
@@ -695,7 +692,7 @@ public class Leader extends LearnerMaster {
                 newLeaderProposal.addQuorumVerifier(self.getLastSeenQuorumVerifier());
             }
 
-            //region 等待newleader数据包确认消息、完成任期晋升
+            //region 等待初始任期确认包、准备进入同步阶段
             // We have to get at least a majority of servers in sync with
             // us. We do this by waiting for the NEWLEADER packet to get
             // acknowledged
@@ -708,6 +705,8 @@ public class Leader extends LearnerMaster {
 
             self.setZabState(QuorumPeer.ZabState.SYNCHRONIZATION);
             //region 数据同步阶段
+
+            //region 等待任期晋升确认包、开始同步
             try {
                 waitForNewLeaderAck(self.getId(), zk.getZxid());
             } catch (InterruptedException e) {
@@ -733,6 +732,7 @@ public class Leader extends LearnerMaster {
                 }
                 return;
             }
+            //endregion
 
             startZkServer();
 
@@ -1385,6 +1385,7 @@ public class Leader extends LearnerMaster {
     }
 
     /**
+     * 开始转发提案请求
      * lets the leader know that a follower is capable of following and is done
      * syncing
      *
@@ -1395,7 +1396,9 @@ public class Leader extends LearnerMaster {
     public synchronized long startForwarding(LearnerHandler handler, long lastSeenZxid) {
         // Queue up any outstanding requests enabling the receipt of
         // new requests
+        //leader又再已建立好的集群中达成了新的提案
         if (lastProposed > lastSeenZxid) {
+            //region 传输新的已完成的提案并提交
             for (Proposal p : toBeApplied) {
                 if (p.packet.getZxid() <= lastSeenZxid) {
                     continue;
@@ -1406,9 +1409,12 @@ public class Leader extends LearnerMaster {
                 QuorumPacket qp = new QuorumPacket(Leader.COMMIT, p.packet.getZxid(), null, null);
                 handler.queuePacket(qp);
             }
+            //endregion
+
+            //region 发送挂起等待完成的提案
             // Only participant need to get outstanding proposals
             if (handler.getLearnerType() == LearnerType.PARTICIPANT) {
-                List<Long> zxids = new ArrayList<Long>(outstandingProposals.keySet());
+                List<Long> zxids = new ArrayList<>(outstandingProposals.keySet());
                 Collections.sort(zxids);
                 for (Long zxid : zxids) {
                     if (zxid <= lastSeenZxid) {
@@ -1417,7 +1423,9 @@ public class Leader extends LearnerMaster {
                     handler.queuePacket(outstandingProposals.get(zxid).packet);
                 }
             }
+            //endregion
         }
+
         if (handler.getLearnerType() == LearnerType.PARTICIPANT) {
             addForwardingFollower(handler);
         } else {
@@ -1552,6 +1560,9 @@ public class Leader extends LearnerMaster {
     // VisibleForTesting
     protected boolean electionFinished = false;
 
+    /**
+     * 等待多数follower任期同步包确认消息
+     */
     @Override
     public void waitForEpochAck(long id, StateSummary ss) throws IOException, InterruptedException {
         synchronized (electingFollowers) {
@@ -1651,11 +1662,9 @@ public class Leader extends LearnerMaster {
     }
 
     /**
+     * 等待多数follower任期确认包确认消息
      * Process NEWLEADER ack of a given sid and wait until the leader receives
      * sufficient acks.
-     *
-     * @param sid
-     * @throws InterruptedException
      */
     @Override
     public void waitForNewLeaderAck(long sid, long zxid) throws InterruptedException {

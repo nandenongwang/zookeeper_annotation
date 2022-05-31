@@ -751,7 +751,7 @@ public class Learner {
                         break outerLoop;
                     //endregion
 
-                    //region NEWLEADER 任期晋升消息、响应确认
+                    //region NEWLEADER 任期晋升消息、响应确认【晋升完成后会进入同步阶段开始同步数据】
                     case Leader.NEWLEADER: // Getting NEWLEADER here instead of in discovery
                         // means this is Zab 1.0
                         LOG.info("Learner received NEWLEADER message");

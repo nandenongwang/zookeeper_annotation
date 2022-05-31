@@ -374,6 +374,9 @@ public class ZKDatabase {
         return enabled;
     }
 
+    /**
+     * 计算最大允许发送日志大小 【快照大小 * 快照因子】
+     */
     public long calculateTxnLogSizeLimit() {
         long snapSize = 0;
         try {
