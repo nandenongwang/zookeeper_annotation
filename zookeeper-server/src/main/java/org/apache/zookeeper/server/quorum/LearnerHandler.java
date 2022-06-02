@@ -1059,6 +1059,7 @@ public class LearnerHandler extends ZooKeeperThread {
             }
             //endregion
 
+            //region 判断首次操作包是DIFF或TRUNC
             // If we are sending the first packet, figure out whether to trunc
             // or diff
             if (needOpPacket) {
@@ -1075,6 +1076,7 @@ public class LearnerHandler extends ZooKeeperThread {
                 }
                 //endregion
 
+                //region todo
                 if (isPeerNewEpochZxid) {
                     // Send diff and fall through if zxid is of a new-epoch
                     LOG.info(
@@ -1083,7 +1085,11 @@ public class LearnerHandler extends ZooKeeperThread {
                             getSid());
                     queueOpPacket(Leader.DIFF, lastCommittedZxid);
                     needOpPacket = false;
-                } else if (packetZxid > peerLastZxid) {
+                }
+                //endregion
+
+                //region learn存在脏数据、TRUNC
+                else if (packetZxid > peerLastZxid) {
                     // Peer have some proposals that the learnerMaster hasn't seen yet
                     // it may used to be a leader
                     if (ZxidUtils.getEpochFromZxid(packetZxid) != ZxidUtils.getEpochFromZxid(peerLastZxid)) {
@@ -1101,7 +1107,9 @@ public class LearnerHandler extends ZooKeeperThread {
                     queueOpPacket(Leader.TRUNC, prevProposalZxid);
                     needOpPacket = false;
                 }
+                //endregion
             }
+            //endregion
 
             if (packetZxid <= queuedZxid) {
                 // We can get here, if we don't have op packet to queue

@@ -1,5 +1,6 @@
 package org.apache.zookeeper.server.quorum;
 
+import lombok.AllArgsConstructor;
 import org.apache.yetus.audience.InterfaceAudience;
 import org.apache.zookeeper.KeeperException.BadArgumentsException;
 import org.apache.zookeeper.common.*;
@@ -72,19 +73,26 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     public static final String CONFIG_KEY_KERBEROS_CANONICALIZE_HOST_NAMES = "zookeeper.kerberos.canonicalizeHostNames";
     public static final String CONFIG_DEFAULT_KERBEROS_CANONICALIZE_HOST_NAMES = "false";
 
+    //region Mbean
     private QuorumBean jmxQuorumBean;
     LocalPeerBean jmxLocalPeerBean;
     private Map<Long, RemotePeerBean> jmxRemotePeerBean;
     LeaderElectionBean jmxLeaderElectionBean;
+    //endregion
 
+    //region 连接管理器【选举用】
     // The QuorumCnxManager is held through an AtomicReference to ensure cross-thread visibility
     // of updates; see the implementation comment at setLastSeenQuorumVerifier().
     private final AtomicReference<QuorumCnxManager> qcmRef = new AtomicReference<>();
+    //endregion
 
+    //region SASL认证授权服务
     QuorumAuthServer authServer;
     QuorumAuthLearner authLearner;
+    //endregion
 
     /**
+     * 状态数据库
      * ZKDatabase is a top level member of quorumpeer
      * which will be used in all the zookeeperservers
      * instantiated later. Also, it is created once on
@@ -99,22 +107,16 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     private JvmPauseMonitor jvmPauseMonitor;
 
     /**
-     * 地址组 【选举、内部通信、外部通信】
+     * 地址组 【包括选举、内部通信、外部通信地址】
      */
+    @AllArgsConstructor
     public static final class AddressTuple {
-
         public final MultipleAddresses quorumAddr;
         public final MultipleAddresses electionAddr;
         public final InetSocketAddress clientAddr;
-
-        public AddressTuple(MultipleAddresses quorumAddr, MultipleAddresses electionAddr, InetSocketAddress clientAddr) {
-            this.quorumAddr = quorumAddr;
-            this.electionAddr = electionAddr;
-            this.clientAddr = clientAddr;
-        }
-
     }
 
+    //region 各类配置
     private int observerMasterPort;
 
     public int getObserverMasterPort() {
@@ -164,6 +166,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         this.multiAddressReachabilityCheckEnabled = multiAddressReachabilityCheckEnabled;
         LOG.info("multiAddress.reachabilityCheckEnabled set to {}", multiAddressReachabilityCheckEnabled);
     }
+    //endregion
 
     /**
      * 存储投票节点各种地址信息
@@ -582,7 +585,8 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     public static final String FLE_TIME_UNIT = "MS";
     private long unavailableStartTime;
 
-    /*
+    /**
+     * 默认由选举权
      * Default value of peer is participant
      */
     private LearnerType learnerType = LearnerType.PARTICIPANT;
@@ -810,8 +814,20 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     private ServerState state = ServerState.LOOKING;
 
     private final AtomicReference<ZabState> zabState = new AtomicReference<>(ZabState.ELECTION);
+
+    /**
+     * learner同步模式
+     */
     private final AtomicReference<SyncMode> syncMode = new AtomicReference<>(SyncMode.NONE);
+
+    /**
+     * learner连接leader地址
+     */
     private final AtomicReference<String> leaderAddress = new AtomicReference<>("");
+
+    /**
+     * leader serverId
+     */
     private final AtomicLong leaderId = new AtomicLong(-1);
 
     private boolean reconfigFlag = false; // indicates that a reconfig just committed
@@ -1288,7 +1304,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     }
 
     /**
-     * 获取节点最后日志ID
+     * 获取节点最后应用日志ID
      * returns the highest zxid that this host has seen
      *
      * @return the highest zxid for this host
@@ -1500,7 +1516,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                                     startLeaderElection();
                                 }
 
-                                //region 进行选举、选出leader、并保存选票
+                                //region 进行选举选出leader、并保存选票
                                 Vote voteForLeader = makeLEStrategy().lookForLeader();
                                 setCurrentVote(voteForLeader);
                                 //endregion
