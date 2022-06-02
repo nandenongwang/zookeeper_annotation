@@ -649,6 +649,7 @@ public class Leader extends LearnerMaster {
             }
             //endregion
 
+            //region 准备任期晋升选票
             newLeaderProposal.packet = new QuorumPacket(NEWLEADER, zk.getZxid(), null, null);
 
             if ((newLeaderProposal.packet.getZxid() & 0xffffffffL) != 0) {
@@ -691,6 +692,7 @@ public class Leader extends LearnerMaster {
             if (self.getLastSeenQuorumVerifier().getVersion() > self.getQuorumVerifier().getVersion()) {
                 newLeaderProposal.addQuorumVerifier(self.getLastSeenQuorumVerifier());
             }
+            //endregion
 
             //region 等待初始任期确认包、准备进入同步阶段
             // We have to get at least a majority of servers in sync with
@@ -700,13 +702,12 @@ public class Leader extends LearnerMaster {
             self.setCurrentEpoch(epoch);
             self.setLeaderAddressAndId(self.getQuorumAddress(), self.getId());
             //endregion
-
             //endregion
 
             self.setZabState(QuorumPeer.ZabState.SYNCHRONIZATION);
-            //region 数据同步阶段
+            //region 数据同步阶段 【主要等待LearnerHandler完成数据同步并启动对外服务】
 
-            //region 等待任期晋升确认包、开始同步
+            //region 等待多数follower任期晋升确认包、结束同步、开始启动对外服务
             try {
                 waitForNewLeaderAck(self.getId(), zk.getZxid());
             } catch (InterruptedException e) {
@@ -734,6 +735,7 @@ public class Leader extends LearnerMaster {
             }
             //endregion
 
+            //region 启动并配置对外服务
             startZkServer();
 
             /**
@@ -757,6 +759,7 @@ public class Leader extends LearnerMaster {
             if (!System.getProperty("zookeeper.leaderServes", "yes").equals("no")) {
                 self.setZooKeeperServer(zk);
             }
+            //endregion
             //endregion
 
             self.setZabState(QuorumPeer.ZabState.BROADCAST);

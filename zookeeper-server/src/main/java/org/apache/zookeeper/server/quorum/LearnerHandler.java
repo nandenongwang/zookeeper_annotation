@@ -554,7 +554,7 @@ public class LearnerHandler extends ZooKeeperThread {
             peerLastZxid = ss.getLastZxid();
             //endregion
 
-            //region 根据learner最后应用提案ID判断是否需要同步快照
+            //region 根据learner最后应用提案ID判断是否需要同步快照 【并将待同步数据写入待发送缓存】
             // Take any necessary action if we need to send TRUNC or DIFF
             // startForwarding() will be called in all cases
             boolean needSnap = syncFollower(peerLastZxid, learnerMaster);
@@ -623,7 +623,7 @@ public class LearnerHandler extends ZooKeeperThread {
             startSendingPackets();
             //endregion
 
-            //region 等待多数learner响应任期晋升包
+            //region 等待多数learner任期晋升响应
             /*
              * Have to wait for the first ACK, wait until
              * the learnerMaster is ready, and only then we can
@@ -903,7 +903,7 @@ public class LearnerHandler extends ZooKeeperThread {
             }
             //endregion
 
-            //region 3、learner最后应用ID大于leader最后应用ID且非晋升后任期ID 【脏数据、从最大缓存处丢弃和开始转发】
+            //region 3、learner最后应用ID大于leader最后应用ID且非晋升后任期ID 【存在脏数据、发送TRUNC从最大缓存处丢弃和开始转发】
             else if (peerLastZxid > maxCommittedLog && !isPeerNewEpochZxid) {
                 // Newer than committedLog, send trunc and done
                 LOG.debug(
@@ -1020,6 +1020,7 @@ public class LearnerHandler extends ZooKeeperThread {
     }
 
     /**
+     * 将要同步的已提交提案存入待发送缓冲队列中 【learner最后应用ID,最大缓存ID】
      * Queue committed proposals into packet queue. The range of packets which
      * is going to be queued are (peerLaxtZxid, maxZxid]
      *
@@ -1041,7 +1042,6 @@ public class LearnerHandler extends ZooKeeperThread {
         long prevProposalZxid = -1;
         while (itr.hasNext()) {
             Proposal propose = itr.next();
-
             long packetZxid = propose.packet.getZxid();
 
             //region 达到最大限制ID、跳出
@@ -1111,13 +1111,16 @@ public class LearnerHandler extends ZooKeeperThread {
             }
             //endregion
 
+            //region
             if (packetZxid <= queuedZxid) {
                 // We can get here, if we don't have op packet to queue
                 // or there is a duplicate txn in a given iterator
                 continue;
             }
+            //endregion
 
-            //region 传输提案再提交提案
+
+            //region 依次传输提案再提交提案
             // Since this is already a committed proposal, we need to follow
             // it by a commit packet
             queuePacket(propose.packet);
